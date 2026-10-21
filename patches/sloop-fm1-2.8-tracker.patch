@@ -1076,7 +1076,7 @@ new file mode 100644
 index 0000000..b3daaf4
 --- /dev/null
 +++ b/tests/tracker_phrase_test.c
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,178 @@
 +/* SPDX-License-Identifier: GPL-3.0-only */
 +/* FM-Tracker integration test through SLOOP's real mix_block/events_block/seq_tick path. */
 +#define main hostsim_main
@@ -1147,10 +1147,7 @@ index 0000000..b3daaf4
 +    memset(fill, 0, sizeof fill);
 +    locks_clear_test(locks);
 +    micro[0] = (int8_t)(MICRO_MAX + 1);
-+    if (fm_tracker_phrase_store(0, 3, lead_a, micro, fill, locks, 4, 2, 0, 64)) {
-+        puts("phrase store accepted invalid microtiming");
-+        return 1;
-+    }
++    if (fm_tracker_phrase_store(0, 3, lead_a, micro, fill, locks, 4, 2, 0, 64)) return 1;
 +    micro[0] = 0;
 +
 +    lead_a[0].note[0] = 60; lead_a[0].note[1] = 64;
@@ -1177,7 +1174,7 @@ index 0000000..b3daaf4
 +    ok &= fm_tracker_phrase_store(1, 1, second, micro, fill, locks, 4, 2, 0, 64);
 +    ok &= fm_tracker_phrase_store(3, 0, (const step_t *)drums_phrase,
 +                                  micro, fill, locks, 4, 2, 0, 64);
-+    if (!ok) { puts("phrase store rejected a valid phrase"); return 1; }
++    if (!ok) return 1;
 +
 +    trk[0].p[P_LEVEL] = 64;
 +    ok &= fm_tracker_sloop_set_chain(&fm_tracker_sloop, 0, lead_chain, 3, 0);
@@ -1194,19 +1191,19 @@ index 0000000..b3daaf4
 +    ok &= trk[1].seq_n == 1u && trk[1].seq_notes[0] == 84u; /* chain transpose uses a bank copy */
 +    ok &= memcmp(trk[TRK_DRUM].dstep, drums_phrase, sizeof drums_phrase) == 0;
 +    ok &= trk[TRK_DRUM].seq_idx == 0u;
-+    if (!ok) { puts("tracker phrase failed at initial selection"); return 1; }
++    if (!ok) return 1;
 +
 +    play_to_row(2);
 +    ok &= fm_tracker_sloop.active_phrase[1] == 1; /* this track advances while track 0 stays on A */
 +    ok &= fm_tracker_sloop.active_phrase[0] == 0;
-+    if (!ok) { puts("tracker phrase failed at independent boundary"); return 1; }
++    if (!ok) return 1;
 +    play_to_row(3);
 +    ok &= trk[0].p[P_LEVEL] == 90; /* SLOOP's native lock_step applied the lock */
 +    play_to_row(4);
 +    ok &= fm_tracker_sloop.active_phrase[0] == 1;
 +    ok &= trk[0].seq_idx == 0u && trk[0].seq_n == 2u; /* TIE at new phrase start keeps both notes */
 +    ok &= trk[0].p[P_LEVEL] == 64 && trk[0].lk_n == 0u; /* transition restored owned lock */
-+    if (!ok) { puts("tracker phrase failed at lock or transition"); return 1; }
++    if (!ok) return 1;
 +    proj_capture(&scene);
 +    scene.t[0].step[0].time = ST_REST;
 +    scene.t[0].step[0].n = 0u;
@@ -1219,10 +1216,6 @@ index 0000000..b3daaf4
 +    ok &= fm_tracker_sloop.active_phrase[1] == FM_TRACKER_NO_PHRASE;
 +    ok &= fm_tracker_sloop.active_phrase[3] == FM_TRACKER_NO_PHRASE;
 +    ok &= trk[TRK_DRUM].seq_tracker_stopped != 0u;
-+    if (!ok)
-+        printf("tracker phrase final: lead=%d notes=%u second=%d drum=%d\n",
-+               fm_tracker_sloop.active_phrase[0], trk[0].seq_n,
-+               fm_tracker_sloop.active_phrase[1], fm_tracker_sloop.active_phrase[3]);
 +    return ok ? 0 : 1;
 +}
 +
@@ -1242,26 +1235,21 @@ index 0000000..b3daaf4
 +    proj_slot[0].t[0].lock[0] = (plock_t){7, P_LEVEL, 88};
 +    proj_slot[0].sum = proj_sum(&proj_slot[0]);
 +    before = proj_slot[0].sum;
-+    if (!fm_tracker_phrase_import_scene(0, 3, 0)) return 512;
++    if (!fm_tracker_phrase_import_scene(0, 3, 0)) return 1;
 +    scene_step = &fm_tracker_phrase_bank[0][3].step[7];
-+    return (proj_slot[0].sum != before ? 1 : 0) |
-+           (proj_slot[1].magic != 0u ? 2 : 0) |
-+           (scene_step->n != 3u ? 4 : 0) |
-+           (scene_step->note[0] != 48u ? 8 : 0) |
-+           (scene_step->note[1] != 55u ? 16 : 0) |
-+           (scene_step->note[2] != 60u ? 32 : 0) |
-+           (fm_tracker_phrase_bank[0][3].micro[7] != -8 ? 64 : 0) |
-+           (((fm_tracker_phrase_bank[0][3].fill[1] >> 6) & 3u) != FC_FILL ? 128 : 0) |
-+           (fm_tracker_phrase_bank[0][3].lock[0].val != 88 ? 256 : 0);
++    return !(proj_slot[0].sum == before && proj_slot[1].magic == 0u &&
++             scene_step->n == 3u && scene_step->note[0] == 48u &&
++             scene_step->note[1] == 55u && scene_step->note[2] == 60u &&
++             fm_tracker_phrase_bank[0][3].micro[7] == -8 &&
++             ((fm_tracker_phrase_bank[0][3].fill[1] >> 6) & 3u) == FC_FILL &&
++             fm_tracker_phrase_bank[0][3].lock[0].val == 88);
 +}
 +
 +int main(void)
 +{
 +    int fails = 0;
-+    int phrase_result = run_phrase_path();
-+    int scene_result = run_scene_isolation();
-+    fails = phrase_result + scene_result;
-+    printf("tracker harness results: phrase=%d scene=%d\n", phrase_result, scene_result);
++    fails += run_phrase_path();
++    fails += run_scene_isolation();
 +    printf("tracker_phrase_test: %s (phrase bank %u bytes)\n",
 +           fails ? "FAIL" : "ok",
 +           (unsigned)sizeof fm_tracker_phrase_bank + sizeof fm_tracker_phrase_valid);
