@@ -4,7 +4,7 @@ from tracker.sloop_protocol import (
     parse_drum_step, parse_micro_get,
 )
 def frame(command, payload):
-    return HEADER + bytes((command,)) + bytes(payload) + b"\\xf7"
+    return HEADER + bytes((command,)) + bytes(payload) + bytes((0xF7,))
 
 class SloopProtocolTests(unittest.TestCase):
     def test_chord_step(self):
@@ -28,3 +28,7 @@ class SloopProtocolTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_empty_legacy_step(self):
+        s = parse_track_step(frame(30, [0, 0, 0, 2, 0, 0]))
+        self.assertEqual(s.notes, ())
