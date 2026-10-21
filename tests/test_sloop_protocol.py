@@ -26,9 +26,9 @@ class SloopProtocolTests(unittest.TestCase):
         with self.assertRaises(ProtocolError):
             parse_track_step(frame(30, [9,0,0,0,0,0]))
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_empty_legacy_step(self):
         s = parse_track_step(frame(30, [0, 0, 0, 2, 0, 0]))
         self.assertEqual(s.notes, ())
+
+if __name__ == "__main__":
+    unittest.main()
