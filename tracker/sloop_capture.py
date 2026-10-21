@@ -26,8 +26,8 @@ def import_synth_pattern(steps: tuple[SynthStep, ...], *,
         raise ValueError("steps must cover contiguous indices from zero")
     if nudges is not None and len(nudges) != 64:
         raise ValueError("nudges must have 64 entries")
-    if fills is not None and len(fills) != 64:
-        raise ValueError("fills must have 64 entries")
+    if fills is not None and (len(fills) != 64 or any(f not in (0, 1, 2, 3) for f in fills)):
+        raise ValueError("fills must have 64 valid entries")
     ordered = tuple(sorted(steps, key=lambda s: s.index))
     source = SourcePattern(tuple(SourceStep(
         notes=s.notes if s.time == 0 else (),
@@ -35,7 +35,7 @@ def import_synth_pattern(steps: tuple[SynthStep, ...], *,
         nudge=nudges[s.index] if nudges is not None else 0,
         tie=s.time == 1,
         slide=bool(s.flags & 2),
-        fill=("normal", "fill", "not_fill", "alternate")[fills[s.index]]
+        fill=("normal", "fill", "not_fill", "normal")[fills[s.index]]
              if fills is not None else "normal"
     ) for s in ordered))
     return ImportedPattern(capture(source), ordered, ())
