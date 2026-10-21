@@ -1076,12 +1076,13 @@ new file mode 100644
 index 0000000..b3daaf4
 --- /dev/null
 +++ b/tests/tracker_phrase_test.c
-@@ -0,0 +1,174 @@
+@@ -0,0 +1,175 @@
 +/* SPDX-License-Identifier: GPL-3.0-only */
 +/* FM-Tracker integration test through SLOOP's real mix_block/events_block/seq_tick path. */
 +#define main hostsim_main
 +#include "hostsim.c"
 +#undef main
++static int32_t tracker_audio_out[2u * CTL];
 +#define PROJ_HOST 1
 +static uint32_t trk_def_engine(uint32_t i) { return i < NPART ? i : 0u; }
 +#include "../firmware/src/project.c"
@@ -1097,8 +1098,8 @@ index 0000000..b3daaf4
 +static void play_to_row(uint32_t row)
 +{
 +    while (transport_row() < row)
-+        mix_block(o, CTL);
-+    mix_block(o, CTL); /* process that row through mix_block -> events_block -> seq_tick */
++        mix_block(tracker_audio_out, CTL);
++    mix_block(tracker_audio_out, CTL); /* process that row through mix_block -> events_block -> seq_tick */
 +}
 +
 +static void locks_clear_test(plock_t *locks)
@@ -1183,7 +1184,7 @@ index 0000000..b3daaf4
 +    ok &= fm_tracker_sloop_start_chain(&fm_tracker_sloop, 0, 0);
 +    ok &= fm_tracker_sloop_start_chain(&fm_tracker_sloop, 1, 0);
 +    ok &= fm_tracker_sloop_start_chain(&fm_tracker_sloop, 3, 0);
-+    mix_block(o, CTL);
++    mix_block(tracker_audio_out, CTL);
 +    ok &= fm_tracker_sloop.active_phrase[0] == 0;
 +    ok &= trk[0].seq_idx == 0u && trk[0].seq_n == 2u;
 +    ok &= trk[0].seq_notes[0] == 60u && trk[0].seq_notes[1] == 64u;
