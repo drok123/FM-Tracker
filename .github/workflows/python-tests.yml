@@ -38,6 +38,7 @@ jobs:
           python sloop-fm1/tools/gen_tables.py sloop-fm1/build/gen/felucca_tables.h
           python sloop-fm1/tools/gen_fm6_patches.py sloop-fm1/build/gen/felucca_fm6.h
           python sloop-fm1/tools/gen_samples.py sloop-fm1/build/gen/felucca_samples.h
+          python sloop-fm1/tools/gen_drumkits.py sloop-fm1/build/gen/felucca_drumkits.h
           cc -O2 -w -DFELUCCA_TRACKER=0 -Isloop-fm1/build/gen -Isloop-fm1/firmware/src -o sloop-fm1/build/host/seq2_stock sloop-fm1/tests/seq2_test.c -lm
           sloop-fm1/build/host/seq2_stock
           cc -O2 -w -DFELUCCA_TRACKER=1 -Isloop-fm1/build/gen -Isloop-fm1/firmware/src -o sloop-fm1/build/host/seq2_tracker sloop-fm1/tests/seq2_test.c -lm
