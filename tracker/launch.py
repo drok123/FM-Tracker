@@ -20,6 +20,7 @@ class ScheduledLaunch:
     track: int
     phrase: str | None
     at_row: int
+    transpose: int = 0
 
 def quantize_row(row: int, quantum: Quantum, *, rows_per_beat: int = 4,
                  beats_per_bar: int = 4, phrase_rows: int = 16) -> int:

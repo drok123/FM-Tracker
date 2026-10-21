@@ -1,6 +1,6 @@
 """Offline preview of SLOOP ratchets and step nudges."""
 from dataclasses import dataclass
-from .sloop_details import synth_note_details, drum_lane_details
+from .sloop_details import synth_note_velocities, drum_lane_velocities
 from .sloop_capture import _validate_nudges
 
 TICKS_PER_ROW = 64
@@ -13,16 +13,18 @@ class TimedHit:
     level: int
     velocity: int
     drum: bool
+    ratchets: int = 1
+    hit_index: int = 0
 
 def step_hits(step, track, start):
     """Shared ideal-grid expansion; start includes the step's nudge."""
     drums = track == 3
-    details = drum_lane_details(step) if drums else (
-        synth_note_details(step) if step.time == 0 else ())
+    details = drum_lane_velocities(step) if drums else (
+        synth_note_velocities(step) if step.time == 0 else ())
     return sorted((TimedHit(start + hit * TICKS_PER_ROW // ratchets,
-                            track, note, level,
-                            0 if drums else step.velocity, drums)
-                   for note, level, ratchets in details
+                            track, note, level, velocity, drums,
+                            ratchets, hit)
+                   for note, level, ratchets, velocity in details
                    for hit in range(ratchets)),
                   key=lambda event: (event.tick, event.track, event.note))
 

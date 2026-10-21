@@ -9,6 +9,15 @@ class TimingPreviewTests(unittest.TestCase):
         hits = preview_hits(import_synth_pattern((step,)),0)
         self.assertEqual([(h.tick,h.note,h.level) for h in hits],
                          [(0,60,1),(0,64,2),(32,64,2)])
+        self.assertEqual([(h.note,h.velocity) for h in hits],
+                         [(60,42),(64,72),(64,72)])
+    def test_accent_and_drum_levels_use_sloop_velocity_mapping(self):
+        synth = SynthStep(0,0,(60,64),0,1,80,0b01,0)
+        self.assertEqual([h.velocity for h in
+                          preview_hits(import_synth_pattern((synth,)),0)], [42,127])
+        drums = DrumStep(0,0b111,0b111000,0)
+        self.assertEqual([h.velocity for h in
+                          preview_hits(import_drum_pattern((drums,)),3)], [100,72,127])
     def test_drum_ratchets(self):
         step = DrumStep(0,5,0,0b010000)
         hits = preview_hits(import_drum_pattern((step,)),3)

@@ -7,6 +7,13 @@ from dataclasses import dataclass
 from .fast_track import SourceStep, SourcePattern, FastTrackPhrase, capture
 from .sloop_protocol import SynthStep, DrumStep
 
+def _validate_locks(locks):
+    if locks is not None and (len(locks) > 24 or any(not 0 <= lock.step < 64 or
+                                 not 0 <= lock.parameter <= 127 or
+                                 not -8192 <= lock.value <= 8191
+                                 for lock in locks)):
+        raise ValueError("invalid parameter lock")
+
 def _validate_nudges(nudges):
     if nudges is not None and (len(nudges) != 64 or
                                any(not isinstance(n, int) or not -32 <= n <= 31
@@ -21,7 +28,8 @@ class ImportedPattern:
 
 def import_synth_pattern(steps: tuple[SynthStep, ...], *,
                          nudges: tuple[int, ...] | None = None,
-                         fills: tuple[int, ...] | None = None) -> ImportedPattern:
+                         fills: tuple[int, ...] | None = None,
+                         locks: tuple[object, ...] | None = None) -> ImportedPattern:
     if not steps:
         raise ValueError("no steps")
     track = steps[0].track
@@ -31,9 +39,13 @@ def import_synth_pattern(steps: tuple[SynthStep, ...], *,
     if sorted(indices) != list(range(len(steps))):
         raise ValueError("steps must cover contiguous indices from zero")
     _validate_nudges(nudges)
+    _validate_locks(locks)
     if fills is not None and (len(fills) != 64 or any(f not in (0, 1, 2, 3) for f in fills)):
         raise ValueError("fills must have 64 valid entries")
     ordered = tuple(sorted(steps, key=lambda s: s.index))
+    locks_by_step = {}
+    for lock in locks or ():
+        locks_by_step.setdefault(lock.step, []).append((lock.parameter, lock.value))
     source = SourcePattern(tuple(SourceStep(
         notes=s.notes if s.time == 0 else (),
         velocity=s.velocity,
@@ -41,7 +53,11 @@ def import_synth_pattern(steps: tuple[SynthStep, ...], *,
         tie=s.time == 1,
         slide=bool(s.flags & 2),
         fill=("normal", "fill", "not_fill", "normal")[fills[s.index]]
-             if fills is not None else "normal"
+             if fills is not None else "normal",
+        locks=tuple(locks_by_step.get(s.index, ())),
+        time=s.time, flags=s.flags, levels=s.levels, ratchets=s.ratchets,
+        fill_condition=fills[s.index] if fills is not None else 0,
+        source_track=s.track, source_index=s.index
     ) for s in ordered))
     return ImportedPattern(capture(source), ordered, ())
 
@@ -58,6 +74,8 @@ def import_drum_pattern(steps: tuple[DrumStep, ...], *,
         nudge=nudges[s.index] if nudges is not None else 0,
         drum_hits=tuple((lane, (s.levels >> (2*lane)) & 3,
                          1 + ((s.ratchets >> (2*lane)) & 3))
-                        for lane in range(16) if s.on & (1 << lane))
+                        for lane in range(16) if s.on & (1 << lane)),
+        levels=s.levels, ratchets=s.ratchets, drum_on=s.on,
+        source_index=s.index
     ) for s in ordered))
     return ImportedPattern(capture(source), (), ordered)
