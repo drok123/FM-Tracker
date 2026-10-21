@@ -47,10 +47,10 @@ class SynthStep:
 
 def parse_track_step(frame: bytes) -> SynthStep:
     command, payload = unpack_frame(frame)
-    if command != TRACK_STEP or len(payload) < 7:
+    if command != TRACK_STEP or len(payload) < 6:
         raise ProtocolError("not a TRACK_STEP reply")
     track, index, n = payload[:3]
-    if track >= 4 or index >= 64 or n > 4:
+    if track >= 3 or index >= 64 or n > 4:
         raise ProtocolError("invalid track, step or chord size")
     # Upstream TRACK_STEP response: track, index, n, notes[n], time, flags,
     # vel, [lvl, hi, rat]. 'hi' is the high portion of level bits.
