@@ -64,7 +64,7 @@ new file mode 100644
 index 0000000..e408a72
 --- /dev/null
 +++ b/firmware/src/fm_tracker_bank.c
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,66 @@
 +/* SPDX-License-Identifier: GPL-3.0-only */
 +#include "fm_tracker_bank.h"
 +
@@ -81,24 +81,11 @@ index 0000000..e408a72
 +{
 +    fm_tracker_phrase_t *dst;
 +    uint32_t i;
-+    uint32_t i;
 +    if (track >= NTRK || phrase >= FM_TRACKER_PHRASES || steps == 0 ||
 +        micro == 0 || fill == 0 || locks == 0 || length < 1 || length > NSTEP ||
 +        division < 0 || division >= NDIV_STEP || swing < 0 || swing > 100 ||
 +        gate < 1 || gate > 127)
 +        return 0;
-+    for (i = 0; i < NSTEP; i++) {
-+        if (micro[i] < MICRO_MIN || micro[i] > MICRO_MAX)
-+            return 0;
-+        if (track != TRK_DRUM) {
-+            uint32_t k, n = steps[i].n;
-+            if (n > 4u || steps[i].time > ST_REST)
-+                return 0;
-+            for (k = 0; k < n; k++)
-+                if (steps[i].note[k] > 127u)
-+                    return 0;
-+        }
-+    }
 +    for (i = 0; i < NSTEP; i++) {
 +        if (micro[i] < MICRO_MIN || micro[i] > MICRO_MAX)
 +            return 0;
