@@ -37,10 +37,20 @@ int fm_tracker_sloop_set_chain(fm_tracker_sloop_t *adapter, uint8_t track,
 {
     uint32_t token;
     int result;
+    uint8_t i;
     if (adapter == NULL || !control_lock(adapter, &token))
         return 0;
-    result = fm_tracker_set_chain(&adapter->scheduler, track, entries,
-                                  count, loop);
+    result = 1;
+    if (track >= FM_TRACKER_TRACKS || count > FM_TRACKER_CHAIN_ENTRIES ||
+        (count != 0u && entries == NULL))
+        result = 0;
+    if (result && adapter->ops.phrase_valid != NULL)
+        for (i = 0; i < count; ++i)
+            if (!adapter->ops.phrase_valid(adapter->user, track, entries[i].phrase))
+                result = 0;
+    if (result)
+        result = fm_tracker_set_chain(&adapter->scheduler, track, entries,
+                                      count, loop);
     control_unlock(adapter, token);
     return result;
 }
@@ -77,8 +87,11 @@ int fm_tracker_sloop_queue_launch(fm_tracker_sloop_t *adapter, uint8_t track,
     int result;
     if (adapter == NULL || !control_lock(adapter, &token))
         return 0;
-    result = fm_tracker_queue_launch(&adapter->scheduler, track, phrase,
-                                     transpose, at_row);
+    result = adapter->ops.phrase_valid == NULL || phrase < 0 ||
+             adapter->ops.phrase_valid(adapter->user, track, phrase);
+    if (result)
+        result = fm_tracker_queue_launch(&adapter->scheduler, track, phrase,
+                                         transpose, at_row);
     control_unlock(adapter, token);
     return result;
 }
@@ -95,9 +108,12 @@ int fm_tracker_sloop_queue_quantized(fm_tracker_sloop_t *adapter,
     int result;
     if (adapter == NULL || !control_lock(adapter, &token))
         return 0;
-    result = fm_tracker_queue_quantized(
-        &adapter->scheduler, track, phrase, transpose, requested_row,
-        quantum, rows_per_beat, beats_per_bar, phrase_rows);
+    result = adapter->ops.phrase_valid == NULL || phrase < 0 ||
+             adapter->ops.phrase_valid(adapter->user, track, phrase);
+    if (result)
+        result = fm_tracker_queue_quantized(
+            &adapter->scheduler, track, phrase, transpose, requested_row,
+            quantum, rows_per_beat, beats_per_bar, phrase_rows);
     control_unlock(adapter, token);
     return result;
 }

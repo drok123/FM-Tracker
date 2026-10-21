@@ -26,6 +26,13 @@ static void control_unlock(void *user, uint32_t token)
     fake->lock_depth--;
 }
 
+static int phrase_valid(void *user, uint8_t track, int16_t phrase)
+{
+    (void)user;
+    return track < FM_TRACKER_TRACKS && phrase >= 0 &&
+           phrase < (int16_t)4;
+}
+
 static void transition(void *user, uint8_t track, int16_t old_phrase,
                        int8_t old_transpose, int16_t phrase, int8_t transpose,
                        uint8_t stopped)
@@ -46,7 +53,7 @@ int main(void)
 {
     fm_tracker_sloop_t adapter;
     fake_sloop_t fake;
-    const fm_tracker_sloop_ops_t ops = {control_lock, control_unlock, transition};
+    const fm_tracker_sloop_ops_t ops = {control_lock, control_unlock, phrase_valid, transition};
     const fm_tracker_entry_t lead[] = {{2, 32, 1, 0}, {3, 32, 1, 5}};
     const fm_tracker_entry_t drums[] = {{1, 32, 2, 0}};
     unsigned i;
@@ -55,6 +62,7 @@ int main(void)
         fake.phrase[i] = FM_TRACKER_NO_PHRASE;
     fm_tracker_sloop_init(&adapter, &ops, &fake);
     assert(fm_tracker_sloop_set_chain(&adapter, 0, lead, 2, 0));
+    assert(!fm_tracker_sloop_queue_launch(&adapter, 0, 4, 0, 1));
     assert(fm_tracker_sloop_set_chain(&adapter, 3, drums, 1, 1));
     assert(fm_tracker_sloop_start_chain(&adapter, 0, 0));
     assert(fm_tracker_sloop_start_chain(&adapter, 3, 0));
@@ -63,14 +71,14 @@ int main(void)
     assert(fake.calls[0] == 1 && fake.phrase[0] == 2);
     assert(fake.calls[3] == 1 && fake.phrase[3] == 1);
     assert(fake.calls[1] == 0 && fake.calls[2] == 0);
-    assert(fm_tracker_sloop_queue_quantized(&adapter, 0, 7, -2, 5,
+    assert(fm_tracker_sloop_queue_quantized(&adapter, 0, 3, -2, 5,
                                             FM_TRACKER_BAR, 4, 4, 16));
     for (i = 1; i < 16; ++i) {
         assert(fm_tracker_sloop_row(&adapter, i));
         assert(fake.phrase[0] == 2);
     }
     assert(fm_tracker_sloop_row(&adapter, 16));
-    assert(fake.phrase[0] == 7 && fake.transpose[0] == -2);
+    assert(fake.phrase[0] == 3 && fake.transpose[0] == -2);
     assert(fake.calls[3] == 1); /* track 4 continues independently */
     assert(fm_tracker_sloop_stop_track(&adapter, 3, 17));
     assert(fm_tracker_sloop_row(&adapter, 17));

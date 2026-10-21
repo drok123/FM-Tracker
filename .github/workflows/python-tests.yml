@@ -24,3 +24,28 @@ jobs:
           ./tracker_chain_test_san
           cc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -fno-omit-frame-pointer -Ifirmware firmware/tracker_chain.c firmware/tracker_sloop_adapter.c tests/tracker_sloop_adapter_test.c -o tracker_sloop_adapter_test_san
           ./tracker_sloop_adapter_test_san
+      - name: Check out the pinned SLOOP 2.8 source
+        uses: actions/checkout@v4
+        with:
+          repository: isod89/sloop-fm1
+          ref: b77bf55e3bf804665b8f5dffb5955bd8443311f0
+          path: sloop-fm1
+      - name: Apply the FM-Tracker firmware overlay
+        run: git -C sloop-fm1 apply ../patches/sloop-fm1-2.8-tracker.patch
+      - name: Generate SLOOP host headers and test stock playback
+        run: |
+          mkdir -p sloop-fm1/build/gen sloop-fm1/build/host
+          python sloop-fm1/tools/gen_tables.py sloop-fm1/build/gen/felucca_tables.h
+          python sloop-fm1/tools/gen_fm6_patches.py sloop-fm1/build/gen/felucca_fm6.h
+          cc -O2 -w -DFELUCCA_TRACKER=0 -Isloop-fm1/build/gen -Isloop-fm1/firmware/src -o sloop-fm1/build/host/seq2_stock sloop-fm1/tests/seq2_test.c -lm
+          sloop-fm1/build/host/seq2_stock
+          cc -O2 -w -DFELUCCA_TRACKER=1 -Isloop-fm1/build/gen -Isloop-fm1/firmware/src -o sloop-fm1/build/host/seq2_tracker sloop-fm1/tests/seq2_test.c -lm
+          sloop-fm1/build/host/seq2_tracker
+      - name: Test phrase selection through SLOOP mix_block and seq_tick
+        run: |
+          cc -O2 -w -DFELUCCA_TRACKER=1 -Isloop-fm1/build/gen -Isloop-fm1/firmware/src -o sloop-fm1/build/host/tracker_phrase_test sloop-fm1/tests/tracker_phrase_test.c -lm
+          sloop-fm1/build/host/tracker_phrase_test
+      - name: Run native SLOOP phrase integration under sanitizers
+        run: |
+          cc -O1 -g -w -DFELUCCA_TRACKER=1 -fsanitize=address,undefined -fno-sanitize=shift-base,signed-integer-overflow -fno-sanitize-recover=all -Isloop-fm1/build/gen -Isloop-fm1/firmware/src -o sloop-fm1/build/host/tracker_phrase_test_san sloop-fm1/tests/tracker_phrase_test.c -lm
+          sloop-fm1/build/host/tracker_phrase_test_san

@@ -1,5 +1,22 @@
 # FM-Tracker architecture audit - 2026-10-21
 
+## Native integration update
+
+The initial audit below described an unconnected callback adapter. The current
+branch now carries a pinned SLOOP 2.8 overlay in
+`patches/sloop-fm1-2.8-tracker.patch`. It adds a separate four-slot-per-track
+native phrase bank, imports valid SLOOP scene tracks into matching bank slots,
+maps chain entries through a phrase-validity check, and calls the existing
+SLOOP chain adapter immediately before its `seq_tick` loop in `events_block`.
+SLOOP project scenes remain whole-project snapshots.
+
+The overlay's native test includes SLOOP's `hostsim.c` and runs patterns through
+`mix_block` → `events_block` → `seq_tick`; CI also runs SLOOP's existing
+sequencer tests with the feature enabled and disabled. See
+[`NATIVE_SLOOP_INTEGRATION.md`](NATIVE_SLOOP_INTEGRATION.md) for exact storage,
+note ownership, timing, validation, and limitations. The AC79/JieLi firmware
+build and physical FM-1 playback are still unverified.
+
 ## Repository and baseline
 
 Working branch `dev/tracker-core`, starting at `9736a50`. The first test run
