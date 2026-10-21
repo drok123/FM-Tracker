@@ -79,19 +79,29 @@ for lossless synth/drum capture, level mapping, captured independent chains,
 quantized/manual launches, gates, ties, continuation, fill conditions, lock
 restoration and transition behavior. The existing standalone chain harness
 previously compiled with MSVC C11, `/W4 /WX`, and ran successfully; its state
-uses 520 bytes and is bounded at 640 bytes. This environment has no `cl`,
-`clang`, `gcc`, or `cc`, so the new boundary harness could not be compiled
-locally. GitHub Actions is configured to run both C harnesses with strict `cc`
-warnings and address/undefined-behavior sanitizers. The Python suite ran with
-`unittest` (94 passed); `pytest` is not
-installed. An isolated attempt to install `pytest` and Pillow stalled during
-package metadata download. The target build cannot proceed here:
-`JIELI_TOOLCHAIN` and the JieLi AC79 SDK are absent. Upstream documents the
-official toolchain installer at `tools/get_toolchain.sh`, the JieLi AC79 SDK
-release `AC79NN_SDK_V1.2.1_2023-12-13` on Gitee, and Pillow. Its Windows setup
-uses WSL and requires `uboot.boot`, `cfg_tool.bin`, and `cfg/eq_cfg_hw.bin`; the
-build check reports that `cpu/wl82/tools/uboot.boot` is missing. There is no
-flashable FM-Tracker image.
+uses 520 bytes and is bounded at 640 bytes. The new SLOOP boundary adapter is
+568 bytes on the Ubuntu 24.04 x86-64 CI runner; this is a host size, not the
+target's 32-bit memory measurement. This environment has no `cl`, `clang`,
+`gcc`, or `cc`, so the C checks ran in CI instead of locally. The run on commit
+`ae31d8513897fd5598a857cb0e0ceaedd5f286aa` passed all 94 Python tests, both
+strict-warning C harnesses, and both AddressSanitizer/UBSan harness runs.
+Locally, `unittest` also passed 94 tests. `pytest` is not installed, and an
+isolated attempt to install `pytest` and Pillow stalled during package metadata
+download. The target build cannot proceed here: `JIELI_TOOLCHAIN` and the JieLi
+AC79 SDK are absent. Upstream documents these prerequisites:
+
+- Pillow for the Python build tools.
+- `JIELI_TOOLCHAIN` with `pi32v2/bin/clang`; `tools/get_toolchain.sh` downloads
+  JieLi's Linux toolchain from its documented package server.
+- JieLi's AC79 SDK release `AC79NN_SDK_V1.2.1_2023-12-13` from the official
+  Gitee repository. The package requires `cpu/wl82/tools/uboot.boot`,
+  `cfg_tool.bin`, and `cfg/eq_cfg_hw.bin`.
+- On Windows, the upstream instructions require WSL with the toolchain and SDK;
+  `SLOOP_WSL_DISTRO` and `SLOOP_TOOLCHAIN` select the WSL environment.
+
+The available upstream command `python tools/build.py` stops because
+`cpu/wl82/tools/uboot.boot` is missing. No target firmware or package size was
+produced, and there is no flashable FM-Tracker image.
 
 ## Recommended next milestone
 
