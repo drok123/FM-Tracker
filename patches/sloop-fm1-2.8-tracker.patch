@@ -1076,7 +1076,7 @@ new file mode 100644
 index 0000000..b3daaf4
 --- /dev/null
 +++ b/tests/tracker_phrase_test.c
-@@ -0,0 +1,189 @@
+@@ -0,0 +1,191 @@
 +/* SPDX-License-Identifier: GPL-3.0-only */
 +/* FM-Tracker integration test through SLOOP's real mix_block/events_block/seq_tick path. */
 +#define main hostsim_main
@@ -1147,8 +1147,10 @@ index 0000000..b3daaf4
 +    memset(fill, 0, sizeof fill);
 +    locks_clear_test(locks);
 +    micro[0] = (int8_t)(MICRO_MAX + 1);
-+    if (fm_tracker_phrase_store(0, 3, lead_a, micro, fill, locks, 4, 2, 0, 64))
++    if (fm_tracker_phrase_store(0, 3, lead_a, micro, fill, locks, 4, 2, 0, 64)) {
++        puts("phrase store accepted invalid microtiming");
 +        return 1;
++    }
 +    micro[0] = 0;
 +
 +    lead_a[0].note[0] = 60; lead_a[0].note[1] = 64;
@@ -1175,7 +1177,7 @@ index 0000000..b3daaf4
 +    ok &= fm_tracker_phrase_store(1, 1, second, micro, fill, locks, 4, 2, 0, 64);
 +    ok &= fm_tracker_phrase_store(3, 0, (const step_t *)drums_phrase,
 +                                  micro, fill, locks, 4, 2, 0, 64);
-+    if (!ok) return 1;
++    if (!ok) { puts("phrase store rejected a valid phrase"); return 1; }
 +
 +    trk[0].p[P_LEVEL] = 64;
 +    ok &= fm_tracker_sloop_set_chain(&fm_tracker_sloop, 0, lead_chain, 3, 0);
