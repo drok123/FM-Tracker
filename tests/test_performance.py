@@ -27,7 +27,7 @@ class PerformanceTests(unittest.TestCase):
         p = Performance({"A":(Cell(60),Cell(61))},1)
         p.queue(ScheduledLaunch(0,"A",0))
         self.assertEqual([(e.row,e.note) for e in p.advance(2) if e.kind=="note_on"],
-                         [(0,60),(2,60)])
+                         [(0,60),(1,61),(2,60)])
     def test_queue_rejects_past(self):
         p = Performance({},1)
         p.advance(0)
