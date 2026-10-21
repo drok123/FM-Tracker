@@ -1076,7 +1076,7 @@ new file mode 100644
 index 0000000..b3daaf4
 --- /dev/null
 +++ b/tests/tracker_phrase_test.c
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,183 @@
 +/* SPDX-License-Identifier: GPL-3.0-only */
 +/* FM-Tracker integration test through SLOOP's real mix_block/events_block/seq_tick path. */
 +#define main hostsim_main
@@ -1215,7 +1215,8 @@ index 0000000..b3daaf4
 +    ok &= fm_tracker_sloop.active_phrase[0] == 2;
 +    ok &= trk[0].seq_n == 0u; /* native REST releases previous phrase notes */
 +    ok &= fm_tracker_sloop.active_phrase[1] == FM_TRACKER_NO_PHRASE;
-+    ok &= fm_tracker_sloop.active_phrase[3] == 0;
++    ok &= fm_tracker_sloop.active_phrase[3] == FM_TRACKER_NO_PHRASE;
++    ok &= trk[TRK_DRUM].seq_tracker_stopped != 0u;
 +    if (!ok)
 +        printf("tracker phrase final: lead=%d notes=%u second=%d drum=%d\n",
 +               fm_tracker_sloop.active_phrase[0], trk[0].seq_n,
