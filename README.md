@@ -3,7 +3,10 @@
 Experimental tracker sequencer and sampler firmware for the M-VAVE FM-1.
 
 ## Status
-**Host-tested prototype with an unconnected firmware boundary.** No flashable firmware is provided. Hardware behavior and compatibility remain unverified on an FM-1.
+**Native SLOOP overlay under host verification.** The pinned SLOOP patch adds a
+per-track native phrase bank and invokes chain transitions from SLOOP's existing
+`events_block`/`seq_tick` path. No flashable firmware is provided. Target build
+and FM-1 hardware behavior remain unverified.
 
 Captured SLOOP playback now shares fine timing with the offline preview and
 preserves chords, per-note/lane dynamics, ratchets and microtiming across live
@@ -26,12 +29,13 @@ for supported behavior and the remaining firmware integration gaps.
 4. **Editor/test harness:** run patterns and verify event timelines on a desktop before hardware flashing.
 
 ## Current milestone
-The Python source model and event preview preserve captured SLOOP steps. Host
-playback covers gates, fills, locks, continuations, independent chains, and
-quantized live launches. The portable C scheduler and SLOOP callback adapter
-accept rows from an existing transport; upstream SLOOP does not yet call the
-adapter. See [the audit](docs/AUDIT.md) for verified scope, build dependencies,
-and the remaining firmware integration work.
+The Python source model and event preview preserve captured SLOOP steps. The
+native overlay copies all SLOOP step fields into an independent per-track phrase
+bank and advances chains from SLOOP's current transport immediately before its
+sequencer runs. CI exercises the actual SLOOP host path and stock mode; the
+target compiler and device remain unverified. See the [native integration
+notes](docs/NATIVE_SLOOP_INTEGRATION.md) and [audit](docs/AUDIT.md) for scope and
+remaining work.
 
 ## Safety
 Do not flash unverified images. Preserve an official recovery procedure and known-good firmware before any device testing.

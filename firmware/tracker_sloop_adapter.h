@@ -12,6 +12,8 @@ typedef struct {
      * SLOOP's IRQ save/restore pair; the row callback itself runs in that ISR. */
     uint32_t (*control_lock)(void *user);
     void (*control_unlock)(void *user, uint32_t token);
+    /* Optional bank validator. With no validator, phrase IDs are external. */
+    int (*phrase_valid)(void *user, uint8_t track, int16_t phrase);
     /* Called in the audio-block context, before SLOOP advances that track's
      * sequencer. Implementations must release/retain notes using SLOOP's own
      * seq_release/trk_note_off semantics, restore locks, and select only this

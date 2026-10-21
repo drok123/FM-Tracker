@@ -1,0 +1,1267 @@
+diff --git a/firmware/src/core.h b/firmware/src/core.h
+index b204f0e..d6fd391 100644
+--- a/firmware/src/core.h
++++ b/firmware/src/core.h
+@@ -6,6 +6,9 @@
+  * pattern and the pattern parameters of its track_t). The parts share one budget of
+  * NVOICE sounding voices (voice.c). */
+ #include <stdint.h>
++#ifndef FELUCCA_TRACKER
++#define FELUCCA_TRACKER 0          /* stock SLOOP build: no phrase bank or sequencer overlay */
++#endif
+ #define NVOICE 8                 /* voices per part, and the budget shared by all parts */
+ #define NPOLY 8
+ #define NPART 3                  /* synth parts: tracks 1..3 */
+@@ -269,6 +272,9 @@ typedef struct track {
+     int16_t lk_base[NLOCK];
+     int16_t lk_set[NLOCK];
+     uint32_t seq_abs;            /* the step of the transport grid last played (seq.c trk_grid), SEQ_NONE */
++#if FELUCCA_TRACKER
++    uint32_t seq_origin_abs;     /* pattern step zero for an FM-Tracker phrase; stock projects keep zero */
++#endif
+     int16_t bend, bend_s;        /* 2.6: MIDI pitch bend -8192..8191 (seq.c), and as it glides (voice.c, a block at a time) */
+     uint16_t seq_idx;            /* its index in the pattern */
+     uint8_t seq_den;             /* the DIV it was played on (a DIV change waits for the next step) */
+@@ -280,6 +286,9 @@ typedef struct track {
+     uint8_t slide_glide;         /* next legato note glides (slide) */
+     uint32_t seq_off;            /* units to the note-off of the step's notes */
+     uint8_t seq_active;          /* any step programmed */
++#if FELUCCA_TRACKER
++    uint8_t seq_tracker_stopped; /* an explicitly stopped tracker chain owns this track */
++#endif
+     uint8_t rat_done[4];         /* ratchet hits played in this step: per note (synth) */
+     uint32_t rat_lanes;          /* .. per lane (drums): 2 bits each */
+     uint32_t rskip_abs;          /* live recording put notes into the step about to play: */
+diff --git a/firmware/src/felucca.c b/firmware/src/felucca.c
+index 9b0d354..0e429a5 100644
+--- a/firmware/src/felucca.c
++++ b/firmware/src/felucca.c
+@@ -14,10 +14,22 @@
+ #include "fm1_cpu1.h"      /* the second core (X0X): started in main.c, used by the render later */
+ #include "felucca_tables.h"
+ 
++#ifndef FELUCCA_TRACKER
++#define FELUCCA_TRACKER 1       /* native phrase bank and independent chains */
++#endif
++
+ #include "libc.c"
+ #include "lcd.c"
+ #include "gfx.c"
+ #include "core.h"
++#if FELUCCA_TRACKER
++#include "fm_tracker_bank.h"
++#include "fm_tracker_bank.c"
++#include "tracker_chain.h"
++#include "tracker_chain.c"
++#include "tracker_sloop_adapter.h"
++#include "tracker_sloop_adapter.c"
++#endif
+ #include "cpu1.h"           /* the second core's job API (defined in cpu1.c; the host tests have their own) */
+ #include "engines.c"
+ #include "drums.c"
+diff --git a/firmware/src/fm_tracker_bank.c b/firmware/src/fm_tracker_bank.c
+new file mode 100644
+index 0000000..e408a72
+--- /dev/null
++++ b/firmware/src/fm_tracker_bank.c
+@@ -0,0 +1,79 @@
++/* SPDX-License-Identifier: GPL-3.0-only */
++#include "fm_tracker_bank.h"
++
++fm_tracker_phrase_t fm_tracker_phrase_bank[NTRK][FM_TRACKER_PHRASES];
++uint8_t fm_tracker_phrase_valid[NTRK];
++_Static_assert(sizeof fm_tracker_phrase_bank <= 13200u,
++               "the initial native phrase bank stays bounded to 13.2 KB");
++
++int fm_tracker_phrase_store(uint8_t track, uint8_t phrase,
++                            const step_t *steps, const int8_t *micro,
++                            const uint8_t *fill, const plock_t *locks,
++                            int16_t length, int16_t division,
++                            int16_t swing, int16_t gate)
++{
++    fm_tracker_phrase_t *dst;
++    uint32_t i;
++    uint32_t i;
++    if (track >= NTRK || phrase >= FM_TRACKER_PHRASES || steps == 0 ||
++        micro == 0 || fill == 0 || locks == 0 || length < 1 || length > NSTEP ||
++        division < 0 || division >= NDIV_STEP || swing < 0 || swing > 100 ||
++        gate < 1 || gate > 127)
++        return 0;
++    for (i = 0; i < NSTEP; i++) {
++        if (micro[i] < MICRO_MIN || micro[i] > MICRO_MAX)
++            return 0;
++        if (track != TRK_DRUM) {
++            uint32_t k, n = steps[i].n;
++            if (n > 4u || steps[i].time > ST_REST)
++                return 0;
++            for (k = 0; k < n; k++)
++                if (steps[i].note[k] > 127u)
++                    return 0;
++        }
++    }
++    for (i = 0; i < NSTEP; i++) {
++        if (micro[i] < MICRO_MIN || micro[i] > MICRO_MAX)
++            return 0;
++        if (track != TRK_DRUM) {
++            uint32_t k, n = steps[i].n;
++            if (n > 4u || steps[i].time > ST_REST)
++                return 0;
++            for (k = 0; k < n; k++)
++                if (steps[i].note[k] > 127u)
++                    return 0;
++        }
++    }
++    dst = &fm_tracker_phrase_bank[track][phrase];
++    /* The audio callback reads one slot while selecting a chain entry. */
++    fm1_irq_off();
++    memcpy(dst->step, steps, sizeof dst->step);
++    memcpy(dst->micro, micro, sizeof dst->micro);
++    memcpy(dst->fill, fill, sizeof dst->fill);
++    memcpy(dst->lock, locks, sizeof dst->lock);
++    dst->length = length;
++    dst->division = division;
++    dst->swing = swing;
++    dst->gate = gate;
++    fm_tracker_phrase_valid[track] |= (uint8_t)(1u << phrase);
++    fm1_irq_on();
++    return 1;
++}
++
++int fm_tracker_phrase_capture(uint8_t track, uint8_t phrase)
++{
++    const track_t *src;
++    if (track >= NTRK)
++        return 0;
++    src = &trk[track];
++    return fm_tracker_phrase_store(track, phrase, src->step, src->micro,
++                                   src->fill, src->lock, src->p[P_SLEN],
++                                   src->p[P_SDIV], src->p[P_SSWING],
++                                   src->p[P_SGATE]);
++}
++
++int fm_tracker_phrase_present(uint8_t track, int16_t phrase)
++{
++    return track < NTRK && phrase >= 0 && phrase < (int16_t)FM_TRACKER_PHRASES &&
++           (fm_tracker_phrase_valid[track] & (uint8_t)(1u << phrase)) != 0u;
++}
+diff --git a/firmware/src/fm_tracker_bank.h b/firmware/src/fm_tracker_bank.h
+new file mode 100644
+index 0000000..f044771
+--- /dev/null
++++ b/firmware/src/fm_tracker_bank.h
+@@ -0,0 +1,38 @@
++/* SPDX-License-Identifier: GPL-3.0-only */
++/* FM-Tracker native phrase bank. Included only by the FM-Tracker SLOOP overlay. */
++#ifndef FM_TRACKER_BANK_H
++#define FM_TRACKER_BANK_H
++
++#include "tracker_chain.h"
++
++#define FM_TRACKER_PHRASES 4u
++
++typedef struct {
++    union {
++        step_t step[NSTEP];
++        dstep_t dstep[NSTEP];
++    };
++    int8_t micro[NSTEP];
++    uint8_t fill[NSTEP / 4u];
++    plock_t lock[NLOCK];
++    int16_t length;
++    int16_t division;
++    int16_t swing;
++    int16_t gate;
++} fm_tracker_phrase_t;
++
++/* One fixed-size bank per physical SLOOP track. The 64-entry chain can reuse
++ * these slots; project scenes remain separate whole-project snapshots. */
++extern fm_tracker_phrase_t fm_tracker_phrase_bank[NTRK][FM_TRACKER_PHRASES];
++extern uint8_t fm_tracker_phrase_valid[NTRK];
++
++int fm_tracker_phrase_store(uint8_t track, uint8_t phrase,
++                            const step_t *steps, const int8_t *micro,
++                            const uint8_t *fill, const plock_t *locks,
++                            int16_t length, int16_t division,
++                            int16_t swing, int16_t gate);
++int fm_tracker_phrase_capture(uint8_t track, uint8_t phrase);
++int fm_tracker_phrase_present(uint8_t track, int16_t phrase);
++int fm_tracker_phrase_import_scene(uint8_t track, uint8_t phrase, uint8_t scene);
++
++#endif
+diff --git a/firmware/src/main.c b/firmware/src/main.c
+index 7c9df5a..04897d7 100644
+--- a/firmware/src/main.c
++++ b/firmware/src/main.c
+@@ -180,6 +180,12 @@ UI_SMALL static void felucca_init(void)
+     song.sel = 0;
+     song.master_q12 = 2048;
+     autosave_resume();                        /* the project as it was left (project.c) */
++#if FELUCCA_TRACKER
++    tracker_init();                            /* ready before UI/control code can configure chains */
++    for (i = 0; i < 4u; i++)
++        for (uint32_t k = 0; k < NTRK; k++)
++            (void)fm_tracker_phrase_import_scene((uint8_t)k, (uint8_t)i, (uint8_t)i);
++#endif
+     song.g[G_SYNC] = (int16_t)lights_sync;    /* a setting of the FM-1 (panel.c) */
+     song.g[G_MIDI] = (int16_t)lights_mout;
+     song.g[G_ROUTE] = (int16_t)lights_min;
+diff --git a/firmware/src/project.c b/firmware/src/project.c
+index 20c4eda..18f4824 100644
+--- a/firmware/src/project.c
++++ b/firmware/src/project.c
+@@ -550,8 +550,45 @@ static void proj_apply(const project_t *p, int all)
+             }
+         fm6_track_loaded(t);                            /* FM6: the project keeps PTCH, not the patch: its slot's */
+     }
++#if FELUCCA_TRACKER
++    fm_tracker_sloop_reapply_active(); /* scene snapshots stay whole-project; active phrases remain separate */
++#endif
+ }
+ 
++#if FELUCCA_TRACKER
++/* Copy one track's pattern data from a whole-project scene into the separate
++ * FM-Tracker bank. This never edits the scene or applies any other track. */
++int fm_tracker_phrase_import_scene(uint8_t track, uint8_t phrase, uint8_t scene)
++{
++    const project_t *p;
++    const proj_trk_t *s;
++    int8_t micro[NSTEP];
++    uint8_t fill[NSTEP / 4u];
++    uint32_t i;
++    int32_t length, division;
++    if (track >= NTRK || phrase >= FM_TRACKER_PHRASES || scene >= 4u)
++        return 0;
++    p = &proj_slot[scene];
++    if (!proj_ok(p))
++        return 0;
++    s = &p->t[track];
++    memset(fill, 0, sizeof fill);
++    for (i = 0; i < NSTEP; i++) {
++        uint32_t condition = pt_fill(s, i);
++        micro[i] = (int8_t)clamp(pt_micro(s, i), MICRO_MIN, MICRO_MAX);
++        if (condition != 3u)
++            fill[i / 4u] |= (uint8_t)(condition << (2u * (i % 4u)));
++    }
++    length = clamp(pt_get(s, P_SLEN), 1, NSTEP);
++    division = clamp(pt_get(s, P_SDIV), 0, NDIV_STEP - 1u);
++    return fm_tracker_phrase_store(track, phrase, s->step, micro, fill,
++                                   s->lock, (int16_t)length,
++                                   (int16_t)division,
++                                   (int16_t)clamp(pt_get(s, P_SSWING), 0, 100),
++                                   (int16_t)clamp(pt_get(s, P_SGATE), 1, 127));
++}
++#endif
++
+ #ifndef PROJ_HOST
+ #if FELUCCA_ARRANGER
+ #include "arranger_scene.c"
+diff --git a/firmware/src/seq.c b/firmware/src/seq.c
+index cbb4201..2209ef5 100644
+--- a/firmware/src/seq.c
++++ b/firmware/src/seq.c
+@@ -654,7 +654,12 @@ UI_SMALL static void hold_restart(track_t *t, uint32_t j, uint32_t len, uint32_t
+  * step ends the hold before (the step model ties the notes of one step only). */
+ UI_SMALL static void rec_note(track_t *t, uint32_t note, uint32_t vel, uint32_t rat, int hold)
+ {
+-    uint32_t len = trk_len(t), later, abs = rec_target(t, &later), idx = abs % len, k;
++    uint32_t len = trk_len(t), later, abs = rec_target(t, &later), idx, k;
++#if FELUCCA_TRACKER
++    idx = (abs - t->seq_origin_abs) % len;
++#else
++    idx = abs % len;
++#endif
+     int was_empty = !(t->step[idx % NSTEP].time == ST_NOTE && t->step[idx % NSTEP].n);
+     step_t *st = &t->step[idx % NSTEP];
+     uint8_t ch[4], keep[4];
+@@ -736,7 +741,12 @@ UI_SMALL static void rec_note(track_t *t, uint32_t note, uint32_t vel, uint32_t
+ static uint8_t roll_rec;                         /* (2.7) a roll's hit is being recorded (roll_hit) */
+ static void rec_hit(track_t *t, uint32_t lane, uint32_t lvl, uint32_t rat)
+ {
+-    uint32_t later, abs = rec_target(t, &later), idx = abs % trk_len(t);
++    uint32_t later, abs = rec_target(t, &later), idx;
++#if FELUCCA_TRACKER
++    idx = (abs - t->seq_origin_abs) % trk_len(t);
++#else
++    idx = abs % trk_len(t);
++#endif
+     int was_empty = !(t->dstep[idx % NSTEP].on[0] | t->dstep[idx % NSTEP].on[1]);
+     undo_mark(t, UNDO_REC(t));
+     dstep_set(&t->dstep[idx], lane, lvl, rat);
+@@ -2262,6 +2272,9 @@ static void seq_reset_tracks(uint32_t pos)
+     for (i = 0; i < NTRK; i++) {
+         track_t *t = &trk[i];
+         t->seq_abs = SEQ_NONE;
++#if FELUCCA_TRACKER
++        t->seq_origin_abs = 0u;
++#endif
+         t->seq_idx = 0;
+         t->rskip_n = 0;
+         t->rskip_lanes = 0;
+@@ -2286,9 +2299,23 @@ static void seq_reset_tracks(uint32_t pos)
+ 
+ static void song_backup(void);                     /* project.c: song mode keeps the loop you made */
+ static void song_restore(void);
++#if FELUCCA_TRACKER
++static uint8_t tracker_ready;
++static void tracker_init(void);
++extern fm_tracker_sloop_t fm_tracker_sloop;
++void fm_tracker_sloop_reapply_active(void);
++#endif
+ 
+ static void seq_start(void)
+ {
++#if FELUCCA_TRACKER
++    uint32_t i;
++    if (!tracker_ready)
++        tracker_init();
++    fm_tracker_sloop_transport_reset(&fm_tracker_sloop);
++    for (i = 0; i < NTRK; i++)
++        trk[i].seq_tracker_stopped = 0u;
++#endif
+ #if FELUCCA_ARRANGER
+     if (arrangement_enabled && !song.playing) {
+         rec_wait = 0;                              /* song mode plays, it does not record */
+@@ -2332,6 +2359,9 @@ static void seq_stop(void)
+         locks_restore(&trk[i]);                    /* the parameters back to their base */
+         trk[i].rh_n = 0;                           /* a recorded note held over the stop: as far as it got */
+     }
++#if FELUCCA_TRACKER
++    fm_tracker_sloop_transport_reset(&fm_tracker_sloop);
++#endif
+     seq_out_all_off();
+ #if FELUCCA_ARRANGER
+     if (arrangement_clock.running) {
+@@ -2502,7 +2532,12 @@ static void seq_ratchets(track_t *t, uint32_t into, uint32_t slen)
+  * (micro >= 0), or how far before its step (micro < 0, as a negative number) */
+ static int32_t micro_units(const track_t *t, uint32_t abs, uint32_t slen)
+ {
++#if FELUCCA_TRACKER
++    uint32_t idx = (abs - t->seq_origin_abs) % trk_len(t);
++    int32_t m = t->micro[idx % NSTEP];
++#else
+     int32_t m = t->micro[abs % trk_len(t) % NSTEP];
++#endif
+     return (int32_t)(slen / 64u) * m;                /* |m| <= 32: fits */
+ }
+ 
+@@ -2524,6 +2559,10 @@ static void seq_tick(track_t *t, uint32_t adv)
+     }
+     if (!song.playing)
+         return;
++#if FELUCCA_TRACKER
++    if (t->seq_tracker_stopped)
++        return;
++#endif
+     abs = trk_grid(t, &into, &slen);
+     {
+         uint32_t div = trk_div(t);
+@@ -2548,7 +2587,11 @@ static void seq_tick(track_t *t, uint32_t adv)
+     }
+     if (fire) {                                      /* a new step: one a block at most */
+         t->seq_abs = nabs;
++#if FELUCCA_TRACKER
++        idx = (nabs - t->seq_origin_abs) % len;
++#else
+         idx = nabs % len;
++#endif
+         t->seq_idx = (uint16_t)idx;
+         t->rat_done[0] = t->rat_done[1] = t->rat_done[2] = t->rat_done[3] = 0;
+         t->rat_lanes = 0;
+@@ -2597,6 +2640,103 @@ static void seq_tick(track_t *t, uint32_t adv)
+         seq_ratchets(t, rel < 0 ? 0u : (uint32_t)rel, slen);
+ }
+ 
++#if FELUCCA_TRACKER
++fm_tracker_sloop_t fm_tracker_sloop;
++
++static uint32_t tracker_control_lock(void *user)
++{
++    (void)user;
++    fm1_irq_off();
++    return 0u;
++}
++
++static void tracker_control_unlock(void *user, uint32_t token)
++{
++    (void)user;
++    (void)token;
++    fm1_irq_on();
++}
++
++static int tracker_phrase_available_cb(void *user, uint8_t track, int16_t phrase)
++{
++    (void)user;
++    return fm_tracker_phrase_present(track, phrase);
++}
++
++static void tracker_phrase_transition(void *user, uint8_t track,
++                                      int16_t old_phrase, int8_t old_transpose,
++                                      int16_t phrase, int8_t transpose,
++                                      uint8_t stopped)
++{
++    track_t *t;
++    const fm_tracker_phrase_t *src;
++    uint32_t into, slen;
++    (void)user;
++    (void)old_phrase;
++    (void)old_transpose;
++    if (track >= NTRK)
++        return;
++    t = &trk[track];
++    locks_restore(t); /* restore only values still owned by the old locks */
++    if (stopped || !fm_tracker_phrase_present(track, phrase)) {
++        seq_release(t);
++        t->seq_abs = SEQ_NONE;
++        t->seq_origin_abs = 0u;
++        t->seq_tracker_stopped = 1u;
++        return;
++    }
++    t->seq_tracker_stopped = 0u;
++    src = &fm_tracker_phrase_bank[track][(uint8_t)phrase];
++    memcpy(t->step, src->step, sizeof t->step);
++    memcpy(t->micro, src->micro, sizeof t->micro);
++    memcpy(t->fill, src->fill, sizeof t->fill);
++    memcpy(t->lock, src->lock, sizeof t->lock);
++    t->p[P_SLEN] = (int16_t)clamp(src->length, 1, NSTEP);
++    t->p[P_SDIV] = (int16_t)clamp(src->division, 0, NDIV_STEP - 1u);
++    t->p[P_SSWING] = (int16_t)clamp(src->swing, 0, 100);
++    t->p[P_SGATE] = (int16_t)clamp(src->gate, 1, 127);
++    if (!is_drum(t) && transpose) {
++        uint32_t i, k;
++        for (i = 0; i < NSTEP; i++) {
++            step_t *step = &t->step[i];
++            uint32_t n = step->n > 4u ? 4u : step->n;
++            for (k = 0; k < n; k++)
++                step->note[k] = (uint8_t)clamp((int32_t)step->note[k] + transpose, 0, 127);
++        }
++    }
++    t->seq_abs = SEQ_NONE;
++    t->seq_origin_abs = trk_grid(t, &into, &slen);
++    t->rskip_n = 0u;
++    t->rskip_lanes = 0u;
++    t->rat_done[0] = t->rat_done[1] = t->rat_done[2] = t->rat_done[3] = 0u;
++    t->rat_lanes = 0u;
++}
++
++static void tracker_init(void)
++{
++    static const fm_tracker_sloop_ops_t ops = {
++        tracker_control_lock, tracker_control_unlock,
++        tracker_phrase_available_cb, tracker_phrase_transition
++    };
++    fm_tracker_sloop_init(&fm_tracker_sloop, &ops, 0);
++    tracker_ready = 1u;
++}
++
++void fm_tracker_sloop_reapply_active(void)
++{
++    uint32_t i;
++    if (!tracker_ready || fm_tracker_sloop.ops.transition == 0)
++        return;
++    for (i = 0; i < NTRK; i++) {
++        int16_t phrase = fm_tracker_sloop.active_phrase[i];
++        if (phrase >= 0)
++            fm_tracker_sloop.ops.transition(fm_tracker_sloop.user, (uint8_t)i,
++                phrase, fm_tracker_sloop.active_transpose[i], phrase,
++                fm_tracker_sloop.active_transpose[i], 0u);
++    }
++}
++#endif
++
+ /* MIDI in: the track that has channel ch (0..15) as its own: the drum track's GLO > DRUMS > CH, synth track i's
+  * GLO > MIDI > CHi (2.6; 1, 2, 3 as before; a channel two tracks have: the first of them), else 0 */
+ static track_t *midi_own(uint32_t ch)
+@@ -3237,6 +3377,12 @@ static void events_block(uint32_t n)
+             input_off(t, d1);
+         }
+     }
++#if FELUCCA_TRACKER
++    if (song.playing) {
++        uint32_t row = clk_beat * 4u + (clk_pos * 4u) / BEAT_U;
++        (void)fm_tracker_sloop_row(&fm_tracker_sloop, row);
++    }
++#endif
+     for (i = 0; i < NTRK; i++)
+         seq_tick(&trk[i], adv);
+     click_tick();
+diff --git a/firmware/src/tracker_chain.c b/firmware/src/tracker_chain.c
+new file mode 100644
+index 0000000..674e7cf
+--- /dev/null
++++ b/firmware/src/tracker_chain.c
+@@ -0,0 +1,236 @@
++/* SPDX-License-Identifier: GPL-3.0-only */
++#include "tracker_chain.h"
++
++#include <stddef.h>
++#include <string.h>
++
++static void change_to(fm_tracker_track_t *track, int16_t phrase,
++                      int8_t transpose, uint32_t row,
++                      fm_tracker_change_t *change)
++{
++    track->active = phrase >= 0;
++    track->phrase = track->active ? phrase : FM_TRACKER_NO_PHRASE;
++    track->transpose = track->active ? transpose : 0;
++    track->entry_start_row = row;
++    change->changed = 1u;
++    change->stopped = (uint8_t)!track->active;
++    change->phrase = track->phrase;
++    change->transpose = track->transpose;
++}
++
++void fm_tracker_init(fm_tracker_t *tracker)
++{
++    uint8_t i;
++    if (tracker != NULL) {
++        memset(tracker, 0, sizeof(*tracker));
++        for (i = 0u; i < FM_TRACKER_TRACKS; ++i)
++            tracker->tracks[i].phrase = FM_TRACKER_NO_PHRASE;
++    }
++}
++
++void fm_tracker_transport_reset(fm_tracker_t *tracker)
++{
++    uint8_t i;
++    if (tracker == NULL)
++        return;
++    for (i = 0u; i < FM_TRACKER_TRACKS; ++i) {
++        fm_tracker_track_t *state = &tracker->tracks[i];
++        memset(&state->chain_running, 0,
++               sizeof(*state) - offsetof(fm_tracker_track_t, chain_running));
++        state->phrase = FM_TRACKER_NO_PHRASE;
++    }
++    tracker->last_row = 0u;
++    tracker->have_row = 0u;
++}
++
++int fm_tracker_set_chain(fm_tracker_t *tracker, uint8_t track,
++                         const fm_tracker_entry_t *entries, uint8_t count,
++                         uint8_t loop)
++{
++    uint8_t i;
++    if (tracker == NULL || track >= FM_TRACKER_TRACKS ||
++        count > FM_TRACKER_CHAIN_ENTRIES || (count != 0u && entries == NULL) ||
++        loop > 1u)
++        return 0;
++    for (i = 0u; i < count; ++i)
++        if (entries[i].phrase < 0 || entries[i].rows == 0u ||
++            entries[i].repeats == 0u)
++            return 0;
++    memset(&tracker->tracks[track].chain, 0,
++           sizeof(tracker->tracks[track].chain));
++    if (count != 0u)
++        memcpy(tracker->tracks[track].chain.entries, entries,
++               (size_t)count * sizeof(*entries));
++    tracker->tracks[track].chain.count = count;
++    tracker->tracks[track].chain.loop = loop;
++    tracker->tracks[track].chain_running = 0u;
++    tracker->tracks[track].chain_start_pending = 0u;
++    return 1;
++}
++
++int fm_tracker_start_chain(fm_tracker_t *tracker, uint8_t track,
++                           uint32_t at_row)
++{
++    fm_tracker_track_t *state;
++    if (tracker == NULL || track >= FM_TRACKER_TRACKS)
++        return 0;
++    state = &tracker->tracks[track];
++    if (state->chain.count == 0u ||
++        (tracker->have_row && at_row <= tracker->last_row))
++        return 0;
++    state->chain_running = 1u;
++    state->chain_start_pending = 1u;
++    state->chain_start_row = at_row;
++    state->position = 0u;
++    state->repeat = 0u;
++    state->launch.pending = 0u;
++    return 1;
++}
++
++int fm_tracker_stop_track(fm_tracker_t *tracker, uint8_t track,
++                          uint32_t at_row)
++{
++    fm_tracker_track_t *state;
++    if (tracker == NULL || track >= FM_TRACKER_TRACKS)
++        return 0;
++    if (tracker->have_row && at_row <= tracker->last_row)
++        return 0;
++    state = &tracker->tracks[track];
++    state->launch.pending = 1u;
++    state->launch.phrase = FM_TRACKER_NO_PHRASE;
++    state->launch.transpose = 0;
++    state->launch.at_row = at_row;
++    return 1;
++}
++
++int fm_tracker_queue_launch(fm_tracker_t *tracker, uint8_t track,
++                            int16_t phrase, int8_t transpose,
++                            uint32_t at_row)
++{
++    fm_tracker_track_t *state;
++    if (tracker == NULL || track >= FM_TRACKER_TRACKS || phrase < -1 ||
++        (tracker->have_row && at_row <= tracker->last_row))
++        return 0;
++    state = &tracker->tracks[track];
++    state->launch.pending = 1u;
++    state->launch.phrase = phrase;
++    state->launch.at_row = at_row;
++    state->launch.transpose = transpose;
++    return 1;
++}
++
++int fm_tracker_quantize_row(uint32_t requested_row, fm_tracker_quantum_t quantum,
++                            uint16_t rows_per_beat, uint16_t beats_per_bar,
++                            uint16_t phrase_rows, uint32_t *scheduled_row)
++{
++    uint32_t grid;
++    uint32_t remainder;
++    if (scheduled_row == NULL || rows_per_beat == 0u || beats_per_bar == 0u ||
++        phrase_rows == 0u)
++        return 0;
++    switch (quantum) {
++    case FM_TRACKER_ROW:
++        grid = 1u;
++        break;
++    case FM_TRACKER_BEAT:
++        grid = rows_per_beat;
++        break;
++    case FM_TRACKER_BAR:
++        grid = (uint32_t)rows_per_beat * beats_per_bar;
++        break;
++    case FM_TRACKER_PHRASE:
++        grid = phrase_rows;
++        break;
++    default:
++        return 0;
++    }
++    remainder = requested_row % grid;
++    if (remainder != 0u) {
++        uint32_t addition = grid - remainder;
++        if (UINT32_MAX - requested_row < addition)
++            return 0;
++        requested_row += addition;
++    }
++    *scheduled_row = requested_row;
++    return 1;
++}
++
++int fm_tracker_queue_quantized(fm_tracker_t *tracker, uint8_t track,
++                               int16_t phrase, int8_t transpose,
++                               uint32_t requested_row, fm_tracker_quantum_t quantum,
++                               uint16_t rows_per_beat, uint16_t beats_per_bar,
++                               uint16_t phrase_rows)
++{
++    uint32_t scheduled;
++    if (!fm_tracker_quantize_row(requested_row, quantum, rows_per_beat,
++                                 beats_per_bar, phrase_rows, &scheduled))
++        return 0;
++    return fm_tracker_queue_launch(tracker, track, phrase, transpose, scheduled);
++}
++
++static void chain_advance(fm_tracker_track_t *state, uint32_t row,
++                          fm_tracker_change_t *change)
++{
++    fm_tracker_chain_t *chain = &state->chain;
++    fm_tracker_entry_t *entry;
++    if (state->chain_start_pending) {
++        if (state->chain_start_row > row)
++            return;
++        entry = &chain->entries[0];
++        state->chain_start_pending = 0u;
++        state->position = 0u;
++        state->repeat = 0u;
++        change_to(state, entry->phrase, entry->transpose, row, change);
++        return;
++    }
++    if (!state->chain_running || state->position >= chain->count)
++        return;
++    entry = &chain->entries[state->position];
++    if (row - state->entry_start_row < entry->rows)
++        return;
++    if (++state->repeat < entry->repeats) {
++        change_to(state, entry->phrase, entry->transpose, row, change);
++        return;
++    }
++    state->repeat = 0u;
++    if (++state->position >= chain->count) {
++        if (!chain->loop) {
++            state->chain_running = 0u;
++            change_to(state, FM_TRACKER_NO_PHRASE, 0, row, change);
++            return;
++        }
++        state->position = 0u;
++    }
++    entry = &chain->entries[state->position];
++    change_to(state, entry->phrase, entry->transpose, row, change);
++}
++
++int fm_tracker_advance(fm_tracker_t *tracker, uint32_t transport_row,
++                       fm_tracker_change_t changes[FM_TRACKER_TRACKS])
++{
++    uint8_t i;
++    if (tracker == NULL || changes == NULL)
++        return 0;
++    if (tracker->have_row &&
++        (transport_row < tracker->last_row ||
++         (tracker->last_row != UINT32_MAX && transport_row > tracker->last_row + 1u)))
++        return 0;
++    memset(changes, 0, sizeof(*changes) * FM_TRACKER_TRACKS);
++    tracker->last_row = transport_row;
++    tracker->have_row = 1u;
++    for (i = 0u; i < FM_TRACKER_TRACKS; ++i) {
++        fm_tracker_track_t *state = &tracker->tracks[i];
++        fm_tracker_change_t *change = &changes[i];
++        if (state->launch.pending && state->launch.at_row <= transport_row) {
++            int16_t phrase = state->launch.phrase;
++            int8_t transpose = state->launch.transpose;
++            state->launch.pending = 0u;
++            state->chain_running = 0u;
++            state->chain_start_pending = 0u;
++            change_to(state, phrase, transpose, transport_row, change);
++        } else {
++            chain_advance(state, transport_row, change);
++        }
++    }
++    return 1;
++}
+diff --git a/firmware/src/tracker_chain.h b/firmware/src/tracker_chain.h
+new file mode 100644
+index 0000000..7cbcee6
+--- /dev/null
++++ b/firmware/src/tracker_chain.h
+@@ -0,0 +1,95 @@
++/* SPDX-License-Identifier: GPL-3.0-only
++ * FM-Tracker bounded chain/launch state for host verification and SLOOP porting.
++ * This module never advances the transport and has no audio or engine calls.
++ */
++#ifndef FM_TRACKER_CHAIN_H
++#define FM_TRACKER_CHAIN_H
++
++#include <stdint.h>
++
++#define FM_TRACKER_TRACKS 4u
++#define FM_TRACKER_CHAIN_ENTRIES 16u
++#define FM_TRACKER_NO_PHRASE INT16_C(-1)
++
++typedef struct {
++    int16_t phrase;
++    uint16_t rows;
++    uint8_t repeats;
++    int8_t transpose;
++} fm_tracker_entry_t;
++
++typedef struct {
++    uint8_t count;
++    uint8_t loop;
++    fm_tracker_entry_t entries[FM_TRACKER_CHAIN_ENTRIES];
++} fm_tracker_chain_t;
++
++typedef struct {
++    int16_t phrase;
++    int8_t transpose;
++    uint32_t at_row;
++    uint8_t pending;
++} fm_tracker_launch_t;
++
++typedef struct {
++    fm_tracker_chain_t chain;
++    uint8_t chain_running;
++    uint8_t chain_start_pending;
++    uint32_t chain_start_row;
++    uint8_t position;
++    uint8_t repeat;
++    uint8_t active;
++    int16_t phrase;
++    int8_t transpose;
++    uint32_t entry_start_row;
++    fm_tracker_launch_t launch;
++} fm_tracker_track_t;
++
++typedef struct {
++    fm_tracker_track_t tracks[FM_TRACKER_TRACKS];
++    uint32_t last_row;
++    uint8_t have_row;
++} fm_tracker_t;
++
++typedef struct {
++    uint8_t changed;
++    uint8_t stopped;
++    int16_t phrase;
++    int8_t transpose;
++} fm_tracker_change_t;
++
++typedef enum {
++    FM_TRACKER_ROW = 0,
++    FM_TRACKER_BEAT = 1,
++    FM_TRACKER_BAR = 2,
++    FM_TRACKER_PHRASE = 3
++} fm_tracker_quantum_t;
++
++void fm_tracker_init(fm_tracker_t *tracker);
++/* Clear active chain/launch runtime while preserving configured chains. */
++void fm_tracker_transport_reset(fm_tracker_t *tracker);
++int fm_tracker_set_chain(fm_tracker_t *tracker, uint8_t track,
++                         const fm_tracker_entry_t *entries, uint8_t count,
++                         uint8_t loop);
++int fm_tracker_start_chain(fm_tracker_t *tracker, uint8_t track,
++                           uint32_t at_row);
++int fm_tracker_stop_track(fm_tracker_t *tracker, uint8_t track,
++                          uint32_t at_row);
++int fm_tracker_queue_launch(fm_tracker_t *tracker, uint8_t track,
++                            int16_t phrase, int8_t transpose,
++                            uint32_t at_row);
++int fm_tracker_quantize_row(uint32_t requested_row, fm_tracker_quantum_t quantum,
++                            uint16_t rows_per_beat, uint16_t beats_per_bar,
++                            uint16_t phrase_rows, uint32_t *scheduled_row);
++int fm_tracker_queue_quantized(fm_tracker_t *tracker, uint8_t track,
++                               int16_t phrase, int8_t transpose,
++                               uint32_t requested_row, fm_tracker_quantum_t quantum,
++                               uint16_t rows_per_beat, uint16_t beats_per_bar,
++                               uint16_t phrase_rows);
++/* Call once per advancing row, detected from SLOOP's existing transport in its
++ * event callback. Rows must stay monotonic and consecutive; no clock is owned
++ * or advanced here. */
++int fm_tracker_advance(fm_tracker_t *tracker, uint32_t transport_row,
++                       fm_tracker_change_t changes[FM_TRACKER_TRACKS]);
++
++#endif
+diff --git a/firmware/src/tracker_sloop_adapter.c b/firmware/src/tracker_sloop_adapter.c
+new file mode 100644
+index 0000000..8e8aa76
+--- /dev/null
++++ b/firmware/src/tracker_sloop_adapter.c
+@@ -0,0 +1,158 @@
++/* SPDX-License-Identifier: GPL-3.0-only */
++#include "tracker_sloop_adapter.h"
++
++#include <string.h>
++
++static int control_lock(fm_tracker_sloop_t *adapter, uint32_t *token)
++{
++    if (adapter->ops.control_lock == NULL || adapter->ops.control_unlock == NULL)
++        return 0;
++    *token = adapter->ops.control_lock(adapter->user);
++    return 1;
++}
++
++static void control_unlock(fm_tracker_sloop_t *adapter, uint32_t token)
++{
++    adapter->ops.control_unlock(adapter->user, token);
++}
++
++void fm_tracker_sloop_init(fm_tracker_sloop_t *adapter,
++                           const fm_tracker_sloop_ops_t *ops, void *user)
++{
++    uint8_t i;
++    if (adapter == NULL)
++        return;
++    memset(adapter, 0, sizeof(*adapter));
++    fm_tracker_init(&adapter->scheduler);
++    if (ops != NULL)
++        adapter->ops = *ops;
++    adapter->user = user;
++    for (i = 0; i < FM_TRACKER_TRACKS; ++i)
++        adapter->active_phrase[i] = FM_TRACKER_NO_PHRASE;
++}
++
++int fm_tracker_sloop_set_chain(fm_tracker_sloop_t *adapter, uint8_t track,
++                               const fm_tracker_entry_t *entries,
++                               uint8_t count, uint8_t loop)
++{
++    uint32_t token;
++    int result;
++    uint8_t i;
++    if (adapter == NULL || !control_lock(adapter, &token))
++        return 0;
++    result = 1;
++    if (track >= FM_TRACKER_TRACKS || count > FM_TRACKER_CHAIN_ENTRIES ||
++        (count != 0u && entries == NULL))
++        result = 0;
++    if (result && adapter->ops.phrase_valid != NULL)
++        for (i = 0; i < count; ++i)
++            if (!adapter->ops.phrase_valid(adapter->user, track, entries[i].phrase))
++                result = 0;
++    if (result)
++        result = fm_tracker_set_chain(&adapter->scheduler, track, entries,
++                                      count, loop);
++    control_unlock(adapter, token);
++    return result;
++}
++
++int fm_tracker_sloop_start_chain(fm_tracker_sloop_t *adapter, uint8_t track,
++                                 uint32_t at_row)
++{
++    uint32_t token;
++    int result;
++    if (adapter == NULL || !control_lock(adapter, &token))
++        return 0;
++    result = fm_tracker_start_chain(&adapter->scheduler, track, at_row);
++    control_unlock(adapter, token);
++    return result;
++}
++
++int fm_tracker_sloop_stop_track(fm_tracker_sloop_t *adapter, uint8_t track,
++                                uint32_t at_row)
++{
++    uint32_t token;
++    int result;
++    if (adapter == NULL || !control_lock(adapter, &token))
++        return 0;
++    result = fm_tracker_stop_track(&adapter->scheduler, track, at_row);
++    control_unlock(adapter, token);
++    return result;
++}
++
++int fm_tracker_sloop_queue_launch(fm_tracker_sloop_t *adapter, uint8_t track,
++                                  int16_t phrase, int8_t transpose,
++                                  uint32_t at_row)
++{
++    uint32_t token;
++    int result;
++    if (adapter == NULL || !control_lock(adapter, &token))
++        return 0;
++    result = adapter->ops.phrase_valid == NULL || phrase < 0 ||
++             adapter->ops.phrase_valid(adapter->user, track, phrase);
++    if (result)
++        result = fm_tracker_queue_launch(&adapter->scheduler, track, phrase,
++                                         transpose, at_row);
++    control_unlock(adapter, token);
++    return result;
++}
++
++int fm_tracker_sloop_queue_quantized(fm_tracker_sloop_t *adapter,
++                                     uint8_t track, int16_t phrase,
++                                     int8_t transpose, uint32_t requested_row,
++                                     fm_tracker_quantum_t quantum,
++                                     uint16_t rows_per_beat,
++                                     uint16_t beats_per_bar,
++                                     uint16_t phrase_rows)
++{
++    uint32_t token;
++    int result;
++    if (adapter == NULL || !control_lock(adapter, &token))
++        return 0;
++    result = adapter->ops.phrase_valid == NULL || phrase < 0 ||
++             adapter->ops.phrase_valid(adapter->user, track, phrase);
++    if (result)
++        result = fm_tracker_queue_quantized(
++            &adapter->scheduler, track, phrase, transpose, requested_row,
++            quantum, rows_per_beat, beats_per_bar, phrase_rows);
++    control_unlock(adapter, token);
++    return result;
++}
++
++void fm_tracker_sloop_transport_reset(fm_tracker_sloop_t *adapter)
++{
++    uint8_t i;
++    if (adapter == NULL)
++        return;
++    for (i = 0u; i < FM_TRACKER_TRACKS; ++i) {
++        if (adapter->active_phrase[i] >= 0 && adapter->ops.transition != NULL)
++            adapter->ops.transition(adapter->user, i, adapter->active_phrase[i],
++                                    adapter->active_transpose[i],
++                                    FM_TRACKER_NO_PHRASE, 0, 1u);
++        adapter->active_phrase[i] = FM_TRACKER_NO_PHRASE;
++        adapter->active_transpose[i] = 0;
++    }
++    fm_tracker_transport_reset(&adapter->scheduler);
++}
++
++int fm_tracker_sloop_row(fm_tracker_sloop_t *adapter, uint32_t transport_row)
++{
++    fm_tracker_change_t changes[FM_TRACKER_TRACKS];
++    uint8_t i;
++    if (adapter == NULL || !fm_tracker_advance(&adapter->scheduler,
++                                                transport_row, changes))
++        return 0;
++    if (adapter->ops.transition == NULL)
++        return 1;
++    for (i = 0; i < FM_TRACKER_TRACKS; ++i) {
++        const fm_tracker_change_t *c = &changes[i];
++        if (c->changed) {
++            adapter->ops.transition(adapter->user, i,
++                                     adapter->active_phrase[i],
++                                     adapter->active_transpose[i], c->phrase,
++                                     c->transpose, c->stopped);
++            adapter->active_phrase[i] = c->phrase;
++            adapter->active_transpose[i] = c->transpose;
++        }
++    }
++    return 1;
++}
+diff --git a/firmware/src/tracker_sloop_adapter.h b/firmware/src/tracker_sloop_adapter.h
+new file mode 100644
+index 0000000..55010fe
+--- /dev/null
++++ b/firmware/src/tracker_sloop_adapter.h
+@@ -0,0 +1,61 @@
++/* SPDX-License-Identifier: GPL-3.0-only
++ * FM-Tracker boundary adapter for SLOOP's existing audio-block sequencer.
++ * The caller supplies SLOOP's transport row; this module never owns a clock.
++ */
++#ifndef FM_TRACKER_SLOOP_ADAPTER_H
++#define FM_TRACKER_SLOOP_ADAPTER_H
++
++#include "tracker_chain.h"
++
++typedef struct {
++    /* Required for control-thread changes while SLOOP audio is active. Map to
++     * SLOOP's IRQ save/restore pair; the row callback itself runs in that ISR. */
++    uint32_t (*control_lock)(void *user);
++    void (*control_unlock)(void *user, uint32_t token);
++    /* Optional bank validator. With no validator, phrase IDs are external. */
++    int (*phrase_valid)(void *user, uint8_t track, int16_t phrase);
++    /* Called in the audio-block context, before SLOOP advances that track's
++     * sequencer. Implementations must release/retain notes using SLOOP's own
++     * seq_release/trk_note_off semantics, restore locks, and select only this
++     * track's phrase. A stopped change has phrase == FM_TRACKER_NO_PHRASE. */
++    void (*transition)(void *user, uint8_t track, int16_t old_phrase,
++                       int8_t old_transpose, int16_t phrase,
++                       int8_t transpose, uint8_t stopped);
++} fm_tracker_sloop_ops_t;
++
++typedef struct {
++    fm_tracker_t scheduler;
++    fm_tracker_sloop_ops_t ops;
++    void *user;
++    int16_t active_phrase[FM_TRACKER_TRACKS];
++    int8_t active_transpose[FM_TRACKER_TRACKS];
++} fm_tracker_sloop_t;
++
++
++void fm_tracker_sloop_init(fm_tracker_sloop_t *adapter,
++                           const fm_tracker_sloop_ops_t *ops, void *user);
++int fm_tracker_sloop_set_chain(fm_tracker_sloop_t *adapter, uint8_t track,
++                               const fm_tracker_entry_t *entries,
++                               uint8_t count, uint8_t loop);
++int fm_tracker_sloop_start_chain(fm_tracker_sloop_t *adapter, uint8_t track,
++                                 uint32_t at_row);
++int fm_tracker_sloop_stop_track(fm_tracker_sloop_t *adapter, uint8_t track,
++                                uint32_t at_row);
++int fm_tracker_sloop_queue_launch(fm_tracker_sloop_t *adapter, uint8_t track,
++                                  int16_t phrase, int8_t transpose,
++                                  uint32_t at_row);
++int fm_tracker_sloop_queue_quantized(fm_tracker_sloop_t *adapter,
++                                     uint8_t track, int16_t phrase,
++                                     int8_t transpose, uint32_t requested_row,
++                                     fm_tracker_quantum_t quantum,
++                                     uint16_t rows_per_beat,
++                                     uint16_t beats_per_bar,
++                                     uint16_t phrase_rows);
++/* End all current phrase ownership and return to row zero while retaining the
++ * configured chains. SLOOP should call this on stop/restart clock reset. */
++void fm_tracker_sloop_transport_reset(fm_tracker_sloop_t *adapter);
++/* Invoke once per SLOOP transport row from its existing events_block path.
++ * Returns 1 when processed, 0 on an invalid/discontinuous row. */
++int fm_tracker_sloop_row(fm_tracker_sloop_t *adapter, uint32_t transport_row);
++
++#endif
+diff --git a/tests/hostsim.c b/tests/hostsim.c
+index f230de8..5b81851 100644
+--- a/tests/hostsim.c
++++ b/tests/hostsim.c
+@@ -28,11 +28,21 @@
+ #undef memset
+ #undef memcpy
+ #undef memcmp
++#ifndef FELUCCA_TRACKER
++#define FELUCCA_TRACKER 1
++#endif
+ static struct { volatile uint32_t notes, buttons; } fm1_in;
+ static volatile uint32_t fm1_remote_btn;           /* (2.7, fm1_input.h: the buttons held over MIDI) */
+ static void fm1_irq_off(void) {}                 /* (the host: one thread) */
+ static void fm1_irq_on(void) {}
+ #include "../firmware/src/core.h"
++#if FELUCCA_TRACKER
++#include "../firmware/src/fm_tracker_bank.h"
++#include "../firmware/src/fm_tracker_bank.c"
++#include "../firmware/src/tracker_chain.c"
++#include "../firmware/src/tracker_sloop_adapter.h"
++#include "../firmware/src/tracker_sloop_adapter.c"
++#endif
+ #include "../firmware/src/cpu1.h"
+ #include "cpu1_host.c"                  /* the second core on the host: CORES=1 inline, CORES=2 a thread */
+ #include "../firmware/src/engines.c"
+diff --git a/tests/tracker_phrase_test.c b/tests/tracker_phrase_test.c
+new file mode 100644
+index 0000000..b3daaf4
+--- /dev/null
++++ b/tests/tracker_phrase_test.c
+@@ -0,0 +1,175 @@
++/* SPDX-License-Identifier: GPL-3.0-only */
++/* FM-Tracker integration test through SLOOP's real mix_block/events_block/seq_tick path. */
++#define main hostsim_main
++#include "hostsim.c"
++#undef main
++#define PROJ_HOST 1
++static uint32_t trk_def_engine(uint32_t i) { return i < NPART ? i : 0u; }
++#include "../firmware/src/project.c"
++
++#include <assert.h>
++#include <stdio.h>
++
++static uint32_t transport_row(void)
++{
++    return clk_beat * 4u + (clk_pos * 4u) / BEAT_U;
++}
++
++static void play_to_row(uint32_t row)
++{
++    while (transport_row() < row)
++        run_block();
++    run_block(); /* process that row through mix_block -> events_block -> seq_tick */
++}
++
++static void locks_clear_test(plock_t *locks)
++{
++    uint32_t i;
++    for (i = 0; i < NLOCK; i++) {
++        locks[i].step = LOCK_FREE;
++        locks[i].param = 0;
++        locks[i].val = 0;
++    }
++}
++
++static int run_phrase_path(void)
++{
++    project_t scene;
++    step_t lead_a[NSTEP], lead_b[NSTEP], lead_c[NSTEP], second[NSTEP];
++    dstep_t drums_phrase[NSTEP];
++    int8_t micro[NSTEP];
++    uint8_t fill[NSTEP / 4u];
++    plock_t locks[NLOCK];
++    const fm_tracker_entry_t lead_chain[] = {
++        {0, 4, 1, 0}, {1, 4, 1, 0}, {2, 4, 1, 0}
++    };
++    const fm_tracker_entry_t second_chain[] = {{0, 2, 1, 12}, {1, 2, 1, 0}};
++    const fm_tracker_entry_t drum_chain[] = {{0, 4, 1, 0}};
++    uint32_t i;
++    int ok = 1;
++
++    memset(fm_tracker_phrase_bank, 0, sizeof fm_tracker_phrase_bank);
++    memset(fm_tracker_phrase_valid, 0, sizeof fm_tracker_phrase_valid);
++    host_tracks_init();
++    memset(&drums, 0, sizeof drums);
++    drums.set = -2;
++    blk = 0;
++    tracker_init();
++    song.g[G_BPM] = 120;
++    song.playing = 0;
++    seq_reset_tracks(0);
++
++    memset(lead_a, 0, sizeof lead_a);
++    memset(lead_b, 0, sizeof lead_b);
++    memset(lead_c, 0, sizeof lead_c);
++    memset(second, 0, sizeof second);
++    memset(drums_phrase, 0, sizeof drums_phrase);
++    memset(micro, 0, sizeof micro);
++    memset(fill, 0, sizeof fill);
++    locks_clear_test(locks);
++    micro[0] = (int8_t)(MICRO_MAX + 1);
++    if (fm_tracker_phrase_store(0, 3, lead_a, micro, fill, locks, 4, 2, 0, 64))
++        return 1;
++    micro[0] = 0;
++
++    lead_a[0].note[0] = 60; lead_a[0].note[1] = 64;
++    lead_a[0].n = 2; lead_a[0].time = ST_NOTE;
++    lead_a[0].flags = SF_ACCENT; lead_a[0].vel = 110;
++    lead_a[0].lvl = LV_GHOST | (LV_HARD << 2);
++    lead_a[0].rat = 1u; /* note 0 x2; note 1 x1 */
++    for (i = 1; i < 4u; i++) lead_a[i].time = ST_TIE;
++    locks[0].step = 3; locks[0].param = P_LEVEL; locks[0].val = 90;
++    micro[0] = -8;
++    for (i = 0; i < 4u; i++) lead_b[i].time = ST_TIE;
++    lead_c[0].time = ST_REST;
++    second[0].note[0] = 72; second[0].n = 1; second[0].time = ST_NOTE;
++    second[1].time = ST_REST;
++    drums_phrase[0].on[0] = 1u;
++    drums_phrase[0].lvl[0] = LV_HARD;
++    drums_phrase[0].rat[0] = 1u;
++
++    ok &= fm_tracker_phrase_store(0, 0, lead_a, micro, fill, locks, 4, 2, 0, 64);
++    locks_clear_test(locks);
++    ok &= fm_tracker_phrase_store(0, 1, lead_b, micro, fill, locks, 4, 2, 0, 64);
++    ok &= fm_tracker_phrase_store(0, 2, lead_c, micro, fill, locks, 4, 2, 0, 64);
++    ok &= fm_tracker_phrase_store(1, 0, second, micro, fill, locks, 4, 2, 0, 64);
++    ok &= fm_tracker_phrase_store(1, 1, second, micro, fill, locks, 4, 2, 0, 64);
++    ok &= fm_tracker_phrase_store(3, 0, (const step_t *)drums_phrase,
++                                  micro, fill, locks, 4, 2, 0, 64);
++    if (!ok) return 1;
++
++    trk[0].p[P_LEVEL] = 64;
++    ok &= fm_tracker_sloop_set_chain(&fm_tracker_sloop, 0, lead_chain, 3, 0);
++    ok &= fm_tracker_sloop_set_chain(&fm_tracker_sloop, 1, second_chain, 2, 0);
++    ok &= fm_tracker_sloop_set_chain(&fm_tracker_sloop, 3, drum_chain, 1, 0);
++    ok &= fm_tracker_sloop_start_chain(&fm_tracker_sloop, 0, 0);
++    ok &= fm_tracker_sloop_start_chain(&fm_tracker_sloop, 1, 0);
++    ok &= fm_tracker_sloop_start_chain(&fm_tracker_sloop, 3, 0);
++    run_block();
++    ok &= fm_tracker_sloop.active_phrase[0] == 0;
++    ok &= trk[0].seq_idx == 0u && trk[0].seq_n == 2u;
++    ok &= trk[0].seq_notes[0] == 60u && trk[0].seq_notes[1] == 64u;
++    ok &= memcmp(trk[0].step, lead_a, sizeof lead_a) == 0;
++    ok &= trk[1].seq_n == 1u && trk[1].seq_notes[0] == 84u; /* chain transpose uses a bank copy */
++    ok &= memcmp(trk[TRK_DRUM].dstep, drums_phrase, sizeof drums_phrase) == 0;
++    ok &= trk[TRK_DRUM].seq_idx == 0u;
++
++    play_to_row(2);
++    ok &= fm_tracker_sloop.active_phrase[1] == 1; /* this track advances while track 0 stays on A */
++    ok &= fm_tracker_sloop.active_phrase[0] == 0;
++    play_to_row(3);
++    ok &= trk[0].p[P_LEVEL] == 90; /* SLOOP's native lock_step applied the lock */
++    play_to_row(4);
++    ok &= fm_tracker_sloop.active_phrase[0] == 1;
++    ok &= trk[0].seq_idx == 0u && trk[0].seq_n == 2u; /* TIE at new phrase start keeps both notes */
++    ok &= trk[0].p[P_LEVEL] == 64 && trk[0].lk_n == 0u; /* transition restored owned lock */
++    proj_capture(&scene);
++    scene.t[0].step[0].time = ST_REST;
++    scene.t[0].step[0].n = 0u;
++    scene.sum = proj_sum(&scene);
++    proj_apply(&scene, 0);
++    ok &= trk[0].step[0].time == ST_TIE; /* whole-scene load cannot replace an active phrase */
++    play_to_row(8);
++    ok &= fm_tracker_sloop.active_phrase[0] == 2;
++    ok &= trk[0].seq_n == 0u; /* native REST releases previous phrase notes */
++    ok &= fm_tracker_sloop.active_phrase[1] == FM_TRACKER_NO_PHRASE;
++    ok &= fm_tracker_sloop.active_phrase[3] == 0;
++    return ok ? 0 : 1;
++}
++
++static int run_scene_isolation(void)
++{
++    uint32_t before;
++    step_t *scene_step;
++    memset(&proj_slot[0], 0, sizeof proj_slot[0]);
++    memset(&proj_slot[1], 0, sizeof proj_slot[1]);
++    proj_capture(&proj_slot[0]);
++    proj_slot[0].t[0].step[7].n = 3;
++    proj_slot[0].t[0].step[7].note[0] = 48;
++    proj_slot[0].t[0].step[7].note[1] = 55;
++    proj_slot[0].t[0].step[7].note[2] = 60;
++    proj_slot[0].t[0].step[7].time = ST_NOTE;
++    proj_slot[0].t[0].mf[7] = (uint8_t)(0x38u | (FC_FILL << 6));
++    proj_slot[0].t[0].lock[0] = (plock_t){7, P_LEVEL, 88};
++    proj_slot[0].sum = proj_sum(&proj_slot[0]);
++    before = proj_slot[0].sum;
++    if (!fm_tracker_phrase_import_scene(0, 3, 0)) return 1;
++    scene_step = &fm_tracker_phrase_bank[0][3].step[7];
++    return proj_slot[0].sum == before && proj_slot[1].magic == 0u &&
++           scene_step->n == 3u && scene_step->note[0] == 48u &&
++           scene_step->note[1] == 55u && scene_step->note[2] == 60u &&
++           fm_tracker_phrase_bank[0][3].micro[7] == -8 &&
++           ((fm_tracker_phrase_bank[0][3].fill[1] >> 6) & 3u) == FC_FILL &&
++           fm_tracker_phrase_bank[0][3].lock[0].val == 88;
++}
++
++int main(void)
++{
++    int fails = 0;
++    fails += run_phrase_path();
++    fails += run_scene_isolation();
++    printf("tracker_phrase_test: %s (phrase bank %u bytes)\n",
++           fails ? "FAIL" : "ok",
++           (unsigned)sizeof fm_tracker_phrase_bank + sizeof fm_tracker_phrase_valid);
++    return fails;
++}
