@@ -14,8 +14,10 @@ updates source note data while keeping extra tracker commands by row index.
 **Important limitations:** This is not connected to SLOOP firmware or
 its actual serialization format. The existing simple tracker compiler
 currently emits only the first note of a chord and does not schedule
-drum hits, locks, nudges, ties or slides. Those values are preserved in
-the source model for later integration; they are not yet played.
+drum hits, locks, nudges, ties or slides. Those values remain in the canonical
+source model. Captured playback uses the supported gates, fill conditions, and
+locks; see [CAPTURED_PLAYBACK.md](CAPTURED_PLAYBACK.md) for what still requires
+upstream engine integration.
 If a pattern's row structure changes, index-based overlay matching may
 attach commands to the wrong notes. A future adapter needs stable step
 identities or an explicit reconciliation UI.

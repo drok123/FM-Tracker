@@ -1,58 +1,56 @@
 # Captured pattern performance bridge
 
-`CapturedPerformance` plays immutable `ImportedPattern` data as abstract events
-on four independent tracks: synth 0-2 and drum lanes on track 3. It shares
-`step_hits` with the offline timing preview; chords, each note/lane's packed
-level and ratchet count, synth velocity and captured step nudges survive playback.
-Import drum microtiming with `import_drum_pattern(steps, nudges=...)`.
+`ImportedPattern.phrase.source.steps` is the canonical editable source model;
+`tracker_rows` is a display/edit projection that only shows the first synth note.
+The canonical row also retains all four notes, time, raw flags, base velocity,
+packed per-note levels/ratchets, fill condition, parameter locks, nudge, track and
+source index. Drum rows retain all 16-bit lane masks, packed 32-bit level/ratchet
+fields and source index. The parallel parsed step tuple remains available for
+exact protocol round-trips. `import_synth_pattern` accepts parsed lock and fill
+replies; `import_drum_pattern` accepts microtiming offsets.
 
-## Time and event contract
+`CapturedPerformance` and the offline `preview_hits` share `step_hits` so chord,
+per-note and lane ratchets, timing, dynamics and resolved SLOOP velocities agree.
+Use `advance_ticks(absolute_tick)` for fine timing (64 ticks per host row) or
+`advance(row)` for compatibility. Launches are row-quantized. Same-tick note-offs
+precede new note-ons, and outgoing ratchets are cancelled at phrase or step
+transitions. Early phrase steps are clamped to the launch boundary; early steps
+inside a running phrase may fire in the preceding row.
 
-- `advance_ticks(tick)` consumes through an absolute integer tick, inclusive,
-  with 64 ticks per row. Skipped calls process all intervening events. Repeating
-  the same endpoint emits nothing; moving backwards raises `ValueError`.
-- `advance(row)` remains available and consumes through `row * 64`, inclusive.
-  It does not consume the rest of that row: call `advance_ticks(row * 64 + 63)`
-  to hear all its fine events before the following boundary.
-- Events retain `row`, `track`, `kind`, `value`, `velocity` and add `tick` and
-  `level`. `row` is the actual event tick divided by 64, rounded down.
-  `level` is the raw 2-bit dynamics code, not a MIDI velocity. Synth velocity
-  remains the captured base velocity; drum velocity remains zero. An eventual
-  backend must apply upstream accent/default-velocity and level scaling and map
-  drum lane IDs to instruments. These events are not directly MIDI messages.
-- A note retrigger releases that pitch before its new note-on. A new NOTE or
-  REST releases the previous chord at its nudged time; TIE sustains it.
-  Same-tick note-offs precede note-ons across tracks.
-- New steps replace remaining ratchets from the previous step. This matters when
-  the next step fires early. `preview_hits` is an offline expansion and retains
-  all potential hits, including those a live step transition would cancel.
-- Queued launches stay on absolute row boundaries, with the last request winning
-  per track. A launch first releases the old chord and cancels its pending hits,
-  then starts the new phrase. A silent launch cancels playback on that track.
-  A first step nudged early is clamped to the launch tick, with its ratchets
-  relative to that clamped start. Later steps, including loop starts, can be early.
-  An outgoing phrase's early step may legitimately sound before a queued boundary.
-- `stop()` releases notes at the first unconsumed tick and cancels delayed hits,
-  active phrases and queued launches. Repeated stops emit nothing.
+The playback reference supports configurable synth gates (0..128), explicit
+TIE/REST steps, matching-note continuation flags, fill-only/no-fill conditions,
+parameter-lock events and lock restoration at steps/transitions/stops. Event
+velocity uses SLOOP's `lvl_vel` mapping: normal levels use the step velocity
+(or 96, or 127 under accent); ghost/soft/hard map to 42/72/127. Drum level 0
+uses 100. Drum event values remain lane IDs; the downstream engine must map
+those lanes to its instrument voices.
 
-Example (host only):
+`CapturedChainPerformance` binds the four independent `TrackChain`s to captured
+playback. Each track has independent entries, durations, repeats and loop/stop
+state. Live requests can use row/beat/bar/phrase quantization, replace a pending
+request, stop a track, restart its chain, transpose synth phrases and leave other
+tracks running. A live launch matching a chain entry resumes from that entry;
+a phrase outside the chain pauses it until restart.
 
-```python
-player = CapturedPerformance({'A': captured_synth_pattern})
-player.queue(ScheduledLaunch(0, 'A', 0))
-events = player.advance_ticks(127)  # through two rows, before boundary 128
-releases = player.stop()          # note-offs at tick 128
-```
+`firmware/tracker_chain.[ch]` is a bounded, allocation-free C chain/launch state
+module. Its caller passes absolute rows from SLOOP's existing transport callback;
+it never makes or advances a clock. It emits phrase-change records for an
+upstream adapter to release voices and select pattern data. A strict-warning
+host C test covers independent chains, repeats, loops, stop/restart and all four
+quantization grids.
 
-## Verification limits
+## Remaining integration limits
 
-This is an ideal integer-grid host reference, not accurate SLOOP firmware
-playback. It sustains notes until explicit step/retrigger/launch/stop releases;
-upstream instrument gate lengths are not captured. Swing, track divisions,
-slides/legato/continuation flags, fill conditions, locks, recording, strum,
-voice limits and audio-block rounding remain unimplemented. Three-way ratchets
-use the preview's floor division (ticks 0, 21, 42), not upstream block thresholds.
-No audio, sampling, recording or hardware behavior is verified by these tests.
+The C module is not linked into `isod89/sloop-fm1` and calls no SLOOP note,
+parameter or audio APIs. No firmware-facing source was changed. Slides/glide,
+voice-pool behavior, exact SLOOP block rounding and parameter value restoration
+against live engine parameters are not reproduced by the host model. Parameter
+lock restore events identify the parameter and tell a backend to restore its
+base value; the model does not own that base. Tracker editing commands are not
+a second complete SLOOP step editor. Do not treat abstract events or the C
+selection state as flashed firmware behavior.
 
-The source projection remains read-only and the existing firmware clock and
-audio engine were not modified. See [audit and upstream inspection](AUDIT.md).
+The module and host tests add no evidence about audio deadlines, the JieLi AC79
+target build, storage compatibility or a physical FM-1. The upstream transport,
+audio ISR, synth/drum engines, recording, MIDI and project format remain in the
+separately inspected SLOOP checkout. See [AUDIT.md](AUDIT.md).

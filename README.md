@@ -25,8 +25,12 @@ for supported behavior and the remaining firmware integration gaps.
 3. **FM-1 adapter:** buttons, display, storage, timing, and audio integration.
 4. **Editor/test harness:** run patterns and verify event timelines on a desktop before hardware flashing.
 
-## First milestone
-Implement a host-testable tracker event model, row/tick scheduler, and regression tests. Audit SLOOP source for CPU, RAM, sample storage, display, and bootloader constraints before attempting firmware integration.
+## Current milestone
+The Python source model and event preview preserve captured SLOOP steps. Host
+playback covers gates, fills, locks, continuations, independent chains, and
+quantized live launches. A small portable C scheduler selects chain phrases in
+the existing transport's row domain. See [the audit](docs/AUDIT.md) for the
+measured scope, tests, build status, and next upstream integration step.
 
 ## Safety
 Do not flash unverified images. Preserve an official recovery procedure and known-good firmware before any device testing.
