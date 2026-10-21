@@ -1076,7 +1076,7 @@ new file mode 100644
 index 0000000..b3daaf4
 --- /dev/null
 +++ b/tests/tracker_phrase_test.c
-@@ -0,0 +1,186 @@
+@@ -0,0 +1,189 @@
 +/* SPDX-License-Identifier: GPL-3.0-only */
 +/* FM-Tracker integration test through SLOOP's real mix_block/events_block/seq_tick path. */
 +#define main hostsim_main
@@ -1241,7 +1241,10 @@ index 0000000..b3daaf4
 +    proj_slot[0].t[0].lock[0] = (plock_t){7, P_LEVEL, 88};
 +    proj_slot[0].sum = proj_sum(&proj_slot[0]);
 +    before = proj_slot[0].sum;
-+    if (!fm_tracker_phrase_import_scene(0, 3, 0)) return 1;
++    if (!fm_tracker_phrase_import_scene(0, 3, 0)) {
++        printf("scene import rejected: magic=%u valid=%d sum=%u calc=%u\n", proj_slot[0].magic, proj_ok(&proj_slot[0]), proj_slot[0].sum, proj_sum(&proj_slot[0]));
++        return 1;
++    }
 +    scene_step = &fm_tracker_phrase_bank[0][3].step[7];
 +    ok = proj_slot[0].sum == before && proj_slot[1].magic == 0u &&
 +           scene_step->n == 3u && scene_step->note[0] == 48u &&
