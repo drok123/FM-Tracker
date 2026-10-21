@@ -1076,7 +1076,7 @@ new file mode 100644
 index 0000000..b3daaf4
 --- /dev/null
 +++ b/tests/tracker_phrase_test.c
-@@ -0,0 +1,191 @@
+@@ -0,0 +1,193 @@
 +/* SPDX-License-Identifier: GPL-3.0-only */
 +/* FM-Tracker integration test through SLOOP's real mix_block/events_block/seq_tick path. */
 +#define main hostsim_main
@@ -1261,8 +1261,10 @@ index 0000000..b3daaf4
 +int main(void)
 +{
 +    int fails = 0;
-+    fails += run_phrase_path();
-+    fails += run_scene_isolation();
++    int phrase_result = run_phrase_path();
++    int scene_result = run_scene_isolation();
++    fails = phrase_result + scene_result;
++    printf("tracker harness results: phrase=%d scene=%d\n", phrase_result, scene_result);
 +    printf("tracker_phrase_test: %s (phrase bank %u bytes)\n",
 +           fails ? "FAIL" : "ok",
 +           (unsigned)sizeof fm_tracker_phrase_bank + sizeof fm_tracker_phrase_valid);
