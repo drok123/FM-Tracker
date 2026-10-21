@@ -1097,8 +1097,8 @@ index 0000000..b3daaf4
 +static void play_to_row(uint32_t row)
 +{
 +    while (transport_row() < row)
-+        run_block();
-+    run_block(); /* process that row through mix_block -> events_block -> seq_tick */
++        mix_block(o, CTL);
++    mix_block(o, CTL); /* process that row through mix_block -> events_block -> seq_tick */
 +}
 +
 +static void locks_clear_test(plock_t *locks)
@@ -1183,7 +1183,7 @@ index 0000000..b3daaf4
 +    ok &= fm_tracker_sloop_start_chain(&fm_tracker_sloop, 0, 0);
 +    ok &= fm_tracker_sloop_start_chain(&fm_tracker_sloop, 1, 0);
 +    ok &= fm_tracker_sloop_start_chain(&fm_tracker_sloop, 3, 0);
-+    run_block();
++    mix_block(o, CTL);
 +    ok &= fm_tracker_sloop.active_phrase[0] == 0;
 +    ok &= trk[0].seq_idx == 0u && trk[0].seq_n == 2u;
 +    ok &= trk[0].seq_notes[0] == 60u && trk[0].seq_notes[1] == 64u;
