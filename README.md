@@ -5,6 +5,12 @@ Experimental tracker sequencer and sampler firmware for the M-VAVE FM-1.
 ## Status
 **Research / host-side prototype.** No flashable firmware is provided yet. Hardware capabilities and compatibility must be verified against upstream SLOOP source and an actual FM-1.
 
+Captured SLOOP playback now shares fine timing with the offline preview and
+preserves chords, per-note/lane dynamics, ratchets and microtiming across live
+phrase switches. This is verified only as abstract host events. See the
+[playback contract](docs/CAPTURED_PLAYBACK.md) and [architecture audit](docs/AUDIT.md)
+for supported behavior and the remaining firmware integration gaps.
+
 ## Design goals
 - Tracker-style phrase, chain, and song sequencing
 - Up to 32 logical tracks as an initial software design target (not a measured hardware limit)

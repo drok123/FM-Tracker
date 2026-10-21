@@ -2,6 +2,11 @@
 
 Upstream: https://github.com/isod89/sloop-fm1
 
+Source inspection on 2026-10-21 used SLOOP 2.8 commit
+`b77bf55e3bf804665b8f5dffb5955bd8443311f0`; see [AUDIT.md](AUDIT.md) for the
+transport/audio call path and verification limits. The following 2.6 overview
+is historical background, not a pin for the current implementation.
+
 Public documentation (checked October 2026) describes SLOOP 2.6:
 - JieLi AC79 firmware with a host-side test suite
 - 3 synth tracks with 8 shared synth voices, plus a 6-voice drum pool
