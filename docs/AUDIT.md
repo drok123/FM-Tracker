@@ -27,11 +27,16 @@ is a separate repository and is not a submodule or build target here.
 
 ## Remaining architectural gaps
 
-1. **Firmware adapter:** `firmware/tracker_chain.[ch]` is in this repository but
-   is not integrated into upstream SLOOP `events_block`, `seq_tick`, `trk_note_on`
-   or `trk_note_off`. Its caller must use the existing transport row and turn
-   changes into upstream note releases and phrase selection. It owns no clock or
-   engine. No sound or device behavior has been verified.
+1. **Firmware integration:** `firmware/tracker_sloop_adapter.[ch]` now provides
+   a bounded callback boundary over the scheduler. It accepts rows from SLOOP's
+   existing transport and sends per-track phrase transitions to the caller.
+   Control-side configuration requires SLOOP IRQ save/restore callbacks to
+   protect it from the audio callback. A fake-SLOOP harness covers independent
+   selection, quantized launches, track stop, restart cleanup and row-gap
+   rejection. The upstream
+   `felucca.c` / `seq.c` files are still unmodified: the callback has not yet
+   been connected to `events_block`, `seq_release`, lock restoration or
+   per-track scene loading, so this is not an integrated firmware feature.
 2. **Slides and audio details:** SLOOP's slide/glide, voice stealing, exact
    ratchet/block rounding and instrument gate implementation have more engine
    context than the host adapter. Preserve flags and test against upstream C
@@ -72,18 +77,29 @@ terms, documented in the upstream `LICENSE` and `LICENSING.md`.
 The existing Python suite grew from 80 to **94 passing tests**. Added coverage
 for lossless synth/drum capture, level mapping, captured independent chains,
 quantized/manual launches, gates, ties, continuation, fill conditions, lock
-restoration and transition behavior. The standalone C harness compiled with
-MSVC C11, `/W4 /WX`, and ran successfully; the state uses 520 bytes and its
-static assertion bounds the scheduler state at 640 bytes. GitHub Actions now compiles/runs the same C harness
-with strict `cc` warnings. The upstream AC79 firmware build could not run for
-the missing Pillow, toolchain and SDK; the Windows shell also failed to start
-the script. There is no flashable FM-Tracker image.
+restoration and transition behavior. The existing standalone chain harness
+previously compiled with MSVC C11, `/W4 /WX`, and ran successfully; its state
+uses 520 bytes and is bounded at 640 bytes. This environment has no `cl`,
+`clang`, `gcc`, or `cc`, so the new boundary harness could not be compiled
+locally. GitHub Actions is configured to run both C harnesses with strict `cc`
+warnings and address/undefined-behavior sanitizers. The Python suite ran with
+`unittest` (94 passed); `pytest` is not
+installed. An isolated attempt to install `pytest` and Pillow stalled during
+package metadata download. The target build cannot proceed here:
+`JIELI_TOOLCHAIN` and the JieLi AC79 SDK are absent. Upstream documents the
+official toolchain installer at `tools/get_toolchain.sh`, the JieLi AC79 SDK
+release `AC79NN_SDK_V1.2.1_2023-12-13` on Gitee, and Pillow. Its Windows setup
+uses WSL and requires `uboot.boot`, `cfg_tool.bin`, and `cfg/eq_cfg_hw.bin`; the
+build check reports that `cpu/wl82/tools/uboot.boot` is missing. There is no
+flashable FM-Tracker image.
 
 ## Recommended next milestone
 
-Integrate the reviewed C selector into a pinned SLOOP 2.8 working tree at its
-existing `events_block`/transport boundary. First adapt one synth track and
-prove note release and quantized selection against SLOOP's current scheduler;
-then add drums and editor/storage mapping. Run upstream host audio/sequencer
-regressions and build with the official JieLi compiler/SDK before any hardware
-session. Keep the model-to-C event comparisons as a gate for each feature.
+Connect the callback in `firmware/tracker_sloop_adapter.[ch]` to a pinned SLOOP
+2.8 source tree. `events_block` should derive the adapter row from `clk_beat` and
+`clk_pos`, then invoke transitions before `seq_tick`; a track transition must
+restore that track's locks, release notes through SLOOP's APIs, and select only
+that track's source phrase. The current four-project scene store is whole-project
+data, so a safe per-track phrase source and UI/storage mapping still need design.
+Run upstream host audio/sequencer regressions and build with the official JieLi
+compiler/SDK before claiming firmware functionality.

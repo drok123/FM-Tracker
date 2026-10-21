@@ -66,6 +66,8 @@ typedef enum {
 } fm_tracker_quantum_t;
 
 void fm_tracker_init(fm_tracker_t *tracker);
+/* Clear active chain/launch runtime while preserving configured chains. */
+void fm_tracker_transport_reset(fm_tracker_t *tracker);
 int fm_tracker_set_chain(fm_tracker_t *tracker, uint8_t track,
                          const fm_tracker_entry_t *entries, uint8_t count,
                          uint8_t loop);

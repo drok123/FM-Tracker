@@ -20,8 +20,27 @@ static void change_to(fm_tracker_track_t *track, int16_t phrase,
 
 void fm_tracker_init(fm_tracker_t *tracker)
 {
-    if (tracker != NULL)
+    uint8_t i;
+    if (tracker != NULL) {
         memset(tracker, 0, sizeof(*tracker));
+        for (i = 0u; i < FM_TRACKER_TRACKS; ++i)
+            tracker->tracks[i].phrase = FM_TRACKER_NO_PHRASE;
+    }
+}
+
+void fm_tracker_transport_reset(fm_tracker_t *tracker)
+{
+    uint8_t i;
+    if (tracker == NULL)
+        return;
+    for (i = 0u; i < FM_TRACKER_TRACKS; ++i) {
+        fm_tracker_track_t *state = &tracker->tracks[i];
+        memset(&state->chain_running, 0,
+               sizeof(*state) - offsetof(fm_tracker_track_t, chain_running));
+        state->phrase = FM_TRACKER_NO_PHRASE;
+    }
+    tracker->last_row = 0u;
+    tracker->have_row = 0u;
 }
 
 int fm_tracker_set_chain(fm_tracker_t *tracker, uint8_t track,

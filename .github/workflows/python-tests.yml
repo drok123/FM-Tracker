@@ -16,3 +16,11 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Compile and run bounded C chain tests
         run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Ifirmware firmware/tracker_chain.c tests/tracker_chain_test.c -o tracker_chain_test && ./tracker_chain_test
+      - name: Compile and run SLOOP boundary adapter tests
+        run: cc -std=c11 -Wall -Wextra -Werror -pedantic -Ifirmware firmware/tracker_chain.c firmware/tracker_sloop_adapter.c tests/tracker_sloop_adapter_test.c -o tracker_sloop_adapter_test && ./tracker_sloop_adapter_test
+      - name: Run native C harnesses with address and undefined behavior sanitizers
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -fno-omit-frame-pointer -Ifirmware firmware/tracker_chain.c tests/tracker_chain_test.c -o tracker_chain_test_san
+          ./tracker_chain_test_san
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -fno-omit-frame-pointer -Ifirmware firmware/tracker_chain.c firmware/tracker_sloop_adapter.c tests/tracker_sloop_adapter_test.c -o tracker_sloop_adapter_test_san
+          ./tracker_sloop_adapter_test_san
