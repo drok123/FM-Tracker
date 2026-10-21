@@ -23,6 +23,25 @@ class TimingPreviewTests(unittest.TestCase):
         step = SynthStep(0,0,(60,),0,0,90,0,0)
         hits = preview_hits(import_synth_pattern((step,)),0,rows=3)
         self.assertEqual([h.tick for h in hits],[0,64,128])
+    def test_imported_nudges_are_used_by_default(self):
+        step = SynthStep(0,0,(60,),0,0,90,0,0)
+        pattern = import_synth_pattern((step,), nudges=(12,)+(0,)*63)
+        self.assertEqual(preview_hits(pattern,0)[0].tick,12)
+        self.assertEqual(preview_hits(pattern,0,nudges=(0,)*64)[0].tick,0)
+    def test_drum_microtiming_and_dynamics(self):
+        pattern = import_drum_pattern((DrumStep(0,4,2 << 4,2 << 4),),
+                                      nudges=(-8,)+(0,)*63)
+        self.assertEqual([(h.tick,h.note,h.level) for h in preview_hits(pattern,3)],
+                         [(-8,2,2),(13,2,2),(34,2,2)])
+    def test_invalid_nudges_rejected_at_capture(self):
+        for nudge in (-33,32,1.5):
+            with self.subTest(nudge=nudge):
+                with self.assertRaises(ValueError):
+                    import_synth_pattern((SynthStep(0,0,(60,),0,0,90,0,0),),
+                                         nudges=(nudge,)+(0,)*63)
+                with self.assertRaises(ValueError):
+                    import_drum_pattern((DrumStep(0,1,0,0),),
+                                        nudges=(nudge,)+(0,)*63)
     def test_reject_wrong_track(self):
         step = SynthStep(0,0,(60,),0,0,90,0,0)
         with self.assertRaises(ValueError):
