@@ -8,7 +8,7 @@ class SloopDetailsTests(unittest.TestCase):
         s=SynthStep(0,0,(60,64,67),0,0,100,0b111001,0b100100)
         self.assertEqual(synth_note_details(s),((60,1,1),(64,2,2),(67,3,3)))
     def test_drum_per_lane_dynamics(self):
-        s=DrumStep(0,0b101,0b11001,0b100100)
+        s=DrumStep(0,0b101,0b110001,0b100000)
         self.assertEqual(drum_lane_details(s),((0,1,1),(2,3,3)))
     def test_reserved_fill_is_normal(self):
         s=SynthStep(0,0,(60,),0,0,100,0,0)
