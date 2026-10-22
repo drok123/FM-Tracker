@@ -1,2 +1,3 @@
-# Unified patches contain blank context lines with a required space prefix.
-patches/*.patch -whitespace
+# Keep firmware patch bytes stable for the build manifest hashes.
+# Unified patches also contain blank context lines with a required space prefix.
+patches/*.patch -whitespace -text
