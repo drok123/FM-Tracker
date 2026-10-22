@@ -55,9 +55,19 @@
     "fm_tracker_sloop_row"
   ],
   "device_validation": {
-    "status": "read-only handshake succeeded",
-    "identity": "FM-1_014",
-    "port": "FM-1 Midi 1",
-    "firmware_written": false
+    "pre_install_identity": "FM-1_014",
+    "pre_install_port": "FM-1 Midi 1",
+    "installation": "completed successfully over USB-MIDI using the pinned package SHA-256",
+    "updater_reported_identity": "FM-1_900",
+    "post_install_read_only_identity": "FM-1_900",
+    "post_install_port": "Felucca 1",
+    "installed_utc": "2026-10-22T01:56:42.074951+00:00",
+    "firmware_behavior_tested": false,
+    "recovery_behavior_tested": false
+  },
+  "host_midi_dependencies": {
+    "mido": "1.2.10",
+    "python-rtmidi": "1.5.8",
+    "installation_scope": "workspace-local under ignored build/python-deps"
   }
 }

@@ -3,12 +3,13 @@
 Experimental tracker sequencer and sampler firmware for the M-VAVE FM-1.
 
 ## Status
-**Native SLOOP overlay target-compiled; hardware not tested.** The pinned SLOOP
+**Native SLOOP overlay target-compiled and installed; playback not yet tested.** The pinned SLOOP
 patch adds a per-track native phrase bank and invokes chain transitions from
 SLOOP's existing `events_block`/`seq_tick` path. A JieLi AC79 build produces
 `work/sloop-fm1/build/felucca.fwsc`; the local SLOOP installer preflight checks
-its package identity, loader marker, and CRCs. The update transport and device
-behavior still need FM-1 hardware verification.
+its package identity, loader marker, and CRCs. The device accepted the update
+from factory identity `FM-1_014` over USB-MIDI and now reports `FM-1_900`.
+Tracker playback and audio behavior remain unverified on the device.
 
 Captured SLOOP playback now shares fine timing with the offline preview and
 preserves chords, per-note/lane dynamics, ratchets and microtiming across live

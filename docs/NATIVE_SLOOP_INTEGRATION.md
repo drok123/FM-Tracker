@@ -54,5 +54,7 @@ bank to flash. A JieLi AC79 target build has succeeded, and its `FM-1_900`
 package passes the local SLOOP installer preflight for the two-stage Felucca
 update format and package CRCs. The installer patch adds `--fm-tracker` to pin
 that product identity and `--verify-only` to perform checks without MIDI access.
-The stock-device handshake and actual FM-1 playback remain unverified. Do not
-flash until the device identity and recovery path have been confirmed.
+The physical FM-1 responded as factory identity `FM-1_014`. The package was
+installed directly from that firmware over USB-MIDI, and both the updater and
+a fresh read-only handshake reported `FM-1_900`. Audio, sequencing, phrase
+editing, and recovery behavior have not yet been exercised on the device.
