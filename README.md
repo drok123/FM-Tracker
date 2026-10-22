@@ -39,6 +39,10 @@ target build succeeded, while device behavior remains unverified. See the
 [native integration notes](docs/NATIVE_SLOOP_INTEGRATION.md) and
 [audit](docs/AUDIT.md) for scope and remaining work.
 
+The successful target build's package, app, loader, patch, and disassembly hashes
+are recorded in [build-manifest.json](build-manifest.json). Verify the package
+SHA-256 there before using the installer.
+
 After applying the pinned patch to the matching local SLOOP 2.8 checkout, validate
 the built package without contacting the FM-1 with:
 

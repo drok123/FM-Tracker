@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "manifest_generated_utc": "2026-10-22T01:54:58.998290+00:00",
+  "build": {
+    "fm_tracker_repo_commit": "d9291f9c8e990e664cd104a1558d675f935d191a",
+    "sloop_upstream_commit": "b77bf55e3bf804665b8f5dffb5955bd8443311f0",
+    "sloop_overlay_patch": "patches/sloop-fm1-2.8-tracker.patch",
+    "sloop_overlay_patch_sha256": "aeb1b6960af6fd66ad9ce5cf85e75c6281f7c45a4f706d9b50eece31d9649172",
+    "firmware_overlay_diff_sha256": "b2e90693d1e03320d4b901818202e34be98de10ad5be3a976af2a633cd44817b",
+    "toolchain": "JieLi pi32v2 clang 4.0.1",
+    "sdk": "AC79NN_SDK_V1.2.1_2023-12-13",
+    "chip": "JieLi AC79 / WL82"
+  },
+  "package": {
+    "path": "../sloop-fm1/build/felucca.fwsc",
+    "identity": "FM-1_900",
+    "model": "FM-1",
+    "size_bytes": 610035,
+    "logical_image_size_bytes": 610015,
+    "sha256": "ad6f9de8fda132fe211c334fc2ac9bd4d5b10943d65f9e84648840b71720d34c",
+    "felucca_loader_marker_present": true,
+    "package_structure_and_crc_valid": true,
+    "preflight_profile": "FM-Tracker FM-1_900"
+  },
+  "artifacts": {
+    "build/felucca.fwsc": {
+      "size_bytes": 610035,
+      "sha256": "ad6f9de8fda132fe211c334fc2ac9bd4d5b10943d65f9e84648840b71720d34c",
+      "modified_utc": "2026-10-22T00:26:34.586427+00:00"
+    },
+    "build/felucca.bin": {
+      "size_bytes": 570540,
+      "sha256": "a906d69e09a6db972b2eb07b8b94310cb5de5b4ffee4156722edc7caa89b5782",
+      "modified_utc": "2026-10-22T00:26:32.360994+00:00"
+    },
+    "build/felucca.elf": {
+      "size_bytes": 617100,
+      "sha256": "3ab4e3ef21287dd8570bf0025c6b51f9069d92dc786cc8982a33a0b314da6113",
+      "modified_utc": "2026-10-22T00:26:32.079945+00:00"
+    },
+    "build/felucca.dis": {
+      "size_bytes": 5992522,
+      "sha256": "991cc817c60428ca2c1a3d8c0223627e8ce37df2f2152abb1c02ff21a8610ec5",
+      "modified_utc": "2026-10-22T00:26:32.346518+00:00"
+    },
+    "build/loader/ota.bin": {
+      "size_bytes": 6879,
+      "sha256": "7024be59452cdde36e61072949d4110df09d0bc07dc19416243913632a45faa5",
+      "modified_utc": "2026-10-22T00:26:14.063334+00:00"
+    }
+  },
+  "overlay_symbols_found_in_disassembly": [
+    "fm_tracker_phrase_bank",
+    "fm_tracker_phrase_capture",
+    "fm_tracker_sloop_row"
+  ],
+  "device_validation": {
+    "status": "read-only handshake succeeded",
+    "identity": "FM-1_014",
+    "port": "FM-1 Midi 1",
+    "firmware_written": false
+  }
+}
