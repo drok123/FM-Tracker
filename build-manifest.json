@@ -86,7 +86,13 @@
       "updater_result": "completed; device restarted and reported FM-1_900",
       "fresh_status_check": "FM-1_900 [running] on Felucca 1",
       "hardware_behavior_tested": false,
-      "recovery_behavior_tested": false
+      "recovery_behavior_tested": false,
+      "lighting_readback": {
+        "button_backlight": "HIGH",
+        "keyboard_backlight": "ALL KEYS",
+        "settings_byte": "0x33",
+        "verified_after_install": true
+      }
     }
   },
   "host_midi_dependencies": {
