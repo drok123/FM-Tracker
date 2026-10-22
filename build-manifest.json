@@ -1,15 +1,24 @@
 {
-  "schema_version": 1,
-  "manifest_generated_utc": "2026-10-22T01:54:58.998290+00:00",
+  "schema_version": 2,
+  "manifest_generated_utc": "2026-10-22T02:31:27.589462+00:00",
   "build": {
-    "fm_tracker_repo_commit": "d9291f9c8e990e664cd104a1558d675f935d191a",
+    "fm_tracker_repo_commit": "9fcb7cb4420f2043bb4e8b8278f0a61b61ab5df3",
     "sloop_upstream_commit": "b77bf55e3bf804665b8f5dffb5955bd8443311f0",
     "sloop_overlay_patch": "patches/sloop-fm1-2.8-tracker.patch",
-    "sloop_overlay_patch_sha256": "aeb1b6960af6fd66ad9ce5cf85e75c6281f7c45a4f706d9b50eece31d9649172",
-    "firmware_overlay_diff_sha256": "b2e90693d1e03320d4b901818202e34be98de10ad5be3a976af2a633cd44817b",
+    "sloop_overlay_patch_sha256": "dee489d4d5f12ede37b4838ddca1302639a399bdd95ad0272b5ab7815cae5565",
     "toolchain": "JieLi pi32v2 clang 4.0.1",
     "sdk": "AC79NN_SDK_V1.2.1_2023-12-13",
-    "chip": "JieLi AC79 / WL82"
+    "chip": "JieLi AC79 / WL82",
+    "branch": "dev/tracker-core",
+    "sloop_patched_tree": "0363d900c11c09d78ce983fc0128dc72a1d58f39",
+    "overlay_applies_cleanly_to_pin": true,
+    "toolchain_directory": "/root/.jieli/jieli-linux-toolchains-20260730.1",
+    "sdk_hashes_verified_by_builder": true,
+    "flags": {
+      "FELUCCA_SLICE": 0,
+      "FELUCCA_TRACKER": 1
+    },
+    "asset_generation": "Existing generated headers retained from installed build"
   },
   "package": {
     "path": "../sloop-fm1/build/felucca.fwsc",
@@ -17,57 +26,82 @@
     "model": "FM-1",
     "size_bytes": 610035,
     "logical_image_size_bytes": 610015,
-    "sha256": "ad6f9de8fda132fe211c334fc2ac9bd4d5b10943d65f9e84648840b71720d34c",
+    "sha256": "ba8283a3fb5b098b9ffc83830441e8c0b4fcd72cdda93cd210afc3a4eaf18e3e",
     "felucca_loader_marker_present": true,
     "package_structure_and_crc_valid": true,
-    "preflight_profile": "FM-Tracker FM-1_900"
+    "preflight_profile": "FM-Tracker FM-1_900",
+    "verify_only": true
   },
   "artifacts": {
     "build/felucca.fwsc": {
       "size_bytes": 610035,
-      "sha256": "ad6f9de8fda132fe211c334fc2ac9bd4d5b10943d65f9e84648840b71720d34c",
-      "modified_utc": "2026-10-22T00:26:34.586427+00:00"
+      "sha256": "ba8283a3fb5b098b9ffc83830441e8c0b4fcd72cdda93cd210afc3a4eaf18e3e"
     },
     "build/felucca.bin": {
-      "size_bytes": 570540,
-      "sha256": "a906d69e09a6db972b2eb07b8b94310cb5de5b4ffee4156722edc7caa89b5782",
-      "modified_utc": "2026-10-22T00:26:32.360994+00:00"
+      "size_bytes": 573488,
+      "sha256": "0995f89fd7b942a320c889d47035a45f14d68d967e29a3ef084dfafec49285c0"
     },
     "build/felucca.elf": {
-      "size_bytes": 617100,
-      "sha256": "3ab4e3ef21287dd8570bf0025c6b51f9069d92dc786cc8982a33a0b314da6113",
-      "modified_utc": "2026-10-22T00:26:32.079945+00:00"
+      "size_bytes": 620080,
+      "sha256": "1e4cdc5e9547a2bb22eedc3733d4886c98d300b0a155daf40839a58b2d6b0916"
     },
     "build/felucca.dis": {
-      "size_bytes": 5992522,
-      "sha256": "991cc817c60428ca2c1a3d8c0223627e8ce37df2f2152abb1c02ff21a8610ec5",
-      "modified_utc": "2026-10-22T00:26:32.346518+00:00"
+      "size_bytes": 6043837,
+      "sha256": "b63db81af53b9ff01dd1f9144e3ea4973d837f14119a911c30347de4b3c26015"
     },
     "build/loader/ota.bin": {
       "size_bytes": 6879,
-      "sha256": "7024be59452cdde36e61072949d4110df09d0bc07dc19416243913632a45faa5",
-      "modified_utc": "2026-10-22T00:26:14.063334+00:00"
+      "sha256": "7024be59452cdde36e61072949d4110df09d0bc07dc19416243913632a45faa5"
     }
   },
   "overlay_symbols_found_in_disassembly": [
     "fm_tracker_phrase_bank",
     "fm_tracker_phrase_capture",
-    "fm_tracker_sloop_row"
+    "fm_tracker_sloop_row",
+    "tracker_ui_edit"
   ],
   "device_validation": {
-    "pre_install_identity": "FM-1_014",
-    "pre_install_port": "FM-1 Midi 1",
-    "installation": "completed successfully over USB-MIDI using the pinned package SHA-256",
-    "updater_reported_identity": "FM-1_900",
-    "post_install_read_only_identity": "FM-1_900",
-    "post_install_port": "Felucca 1",
-    "installed_utc": "2026-10-22T01:56:42.074951+00:00",
-    "firmware_behavior_tested": false,
+    "installed": false,
+    "device_contacted": false,
+    "hardware_behavior_tested": false,
     "recovery_behavior_tested": false
   },
   "host_midi_dependencies": {
     "mido": "1.2.10",
     "python-rtmidi": "1.5.8",
     "installation_scope": "workspace-local under ignored build/python-deps"
+  },
+  "memory": {
+    "app_image_bytes": 573488,
+    "ram_data_bss_bytes": 72760,
+    "ram_region_bytes": 98304,
+    "lowram_bytes": 22772,
+    "lowram_capacity_bytes": 29488,
+    "pool_bytes": 333900,
+    "pool_capacity_bytes": 344064,
+    "pool_headroom_bytes": 10164,
+    "required_pool_headroom_bytes": 8192
+  },
+  "validation": {
+    "python_tests_passed": 94,
+    "bounded_chain_and_adapter_tests": "passed, plain and ASan/UBSan",
+    "native_phrase_integration": "passed, plain and ASan/UBSan",
+    "native_tracker_ui": "passed, plain and ASan/UBSan",
+    "stock_and_tracker_seq2": "passed",
+    "stock_and_tracker_full_ui": "passed, including 20000 random frames each",
+    "installer_simulation": "passed",
+    "package_verify_only": "passed, no device contacted",
+    "patched_tree_reconstruction": "exact match"
+  },
+  "rollback": {
+    "source_commit": "f90cce4",
+    "package_sha256": "ad6f9de8fda132fe211c334fc2ac9bd4d5b10943d65f9e84648840b71720d34c",
+    "preserved_directory": "C:\\Users\\derro.DESKTOP-J1702ON\\Documents\\Codex\\2026-10-21\\referenced-chatgpt-conversation-this-is-an\\outputs\\rollback-f90cce4",
+    "all_archived_artifact_hashes_match_previous_manifest": true,
+    "hardware_status": "Previously installed; user confirmed boots into SLOOP and works. Detailed audio and recovery unmeasured."
+  },
+  "export": {
+    "directory": "C:\\Users\\derro.DESKTOP-J1702ON\\Documents\\Codex\\2026-10-21\\referenced-chatgpt-conversation-this-is-an\\outputs\\tracker-screen-candidate",
+    "artifact_path_convention": "build/NAME in artifacts corresponds to NAME under export.directory"
   }
 }
