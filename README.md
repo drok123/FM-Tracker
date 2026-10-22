@@ -3,10 +3,12 @@
 Experimental tracker sequencer and sampler firmware for the M-VAVE FM-1.
 
 ## Status
-**Native SLOOP overlay under host verification.** The pinned SLOOP patch adds a
-per-track native phrase bank and invokes chain transitions from SLOOP's existing
-`events_block`/`seq_tick` path. No flashable firmware is provided. Target build
-and FM-1 hardware behavior remain unverified.
+**Native SLOOP overlay target-compiled; hardware not tested.** The pinned SLOOP
+patch adds a per-track native phrase bank and invokes chain transitions from
+SLOOP's existing `events_block`/`seq_tick` path. A JieLi AC79 build produces
+`work/sloop-fm1/build/felucca.fwsc`; the local SLOOP installer preflight checks
+its package identity, loader marker, and CRCs. The update transport and device
+behavior still need FM-1 hardware verification.
 
 Captured SLOOP playback now shares fine timing with the offline preview and
 preserves chords, per-note/lane dynamics, ratchets and microtiming across live
@@ -33,9 +35,22 @@ The Python source model and event preview preserve captured SLOOP steps. The
 native overlay copies all SLOOP step fields into an independent per-track phrase
 bank and advances chains from SLOOP's current transport immediately before its
 sequencer runs. CI exercises the actual SLOOP host path and stock mode; the
-target compiler and device remain unverified. See the [native integration
-notes](docs/NATIVE_SLOOP_INTEGRATION.md) and [audit](docs/AUDIT.md) for scope and
-remaining work.
+target build succeeded, while device behavior remains unverified. See the
+[native integration notes](docs/NATIVE_SLOOP_INTEGRATION.md) and
+[audit](docs/AUDIT.md) for scope and remaining work.
+
+After applying the pinned patch to the matching local SLOOP 2.8 checkout, validate
+the built package without contacting the FM-1 with:
+
+```sh
+python3 tools/fm1_install.py build/felucca.fwsc --fm-tracker --verify-only
+```
+
+This profile requires product identity `FM-1_900`, the Felucca loader marker,
+and valid package CRCs. The ordinary SLOOP two-stage updater code accepts a
+running FM-1 identity such as factory `FM-1_015`; the simulator exercises that
+route, but the factory updater handshake has not been verified on hardware. A
+successful preflight or simulator test does not mean the firmware is installed.
 
 ## Safety
 Do not flash unverified images. Preserve an official recovery procedure and known-good firmware before any device testing.

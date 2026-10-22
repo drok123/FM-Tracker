@@ -1277,3 +1277,77 @@ index 0000000..b3daaf4
 +           (unsigned)sizeof fm_tracker_phrase_bank + sizeof fm_tracker_phrase_valid);
 +    return fails;
 +}
+
+diff --git a/tests/install_test.py b/tests/install_test.py
+index 4fc3ab0..a3e81cf 100644
+--- a/tests/install_test.py
++++ b/tests/install_test.py
+@@ -285,2 +285,12 @@ def errors():
+     ok(rc == 2 and "damaged package" in err and dev.sent == [], "damaged package (a file's CRC) -> exit 2, no MIDI")
++    dev = FakeFM1(image)
++    rc, out, err = cli([p, "--fm-tracker", "--yes"], dev)
++    ok(rc == 0 and dev.bad == 0, "FM-Tracker profile accepts FM-1_900 with intact Felucca loader")
++    dev = FakeFM1(image)
++    rc, out, err = cli([pkgfile("wrong-product.fwsc", package("FM-1_901")), "--fm-tracker", "--yes"], dev)
++    ok(rc == 2 and "expected FM-1_900" in err and dev.upgrades == 0,
++       "FM-Tracker profile rejects another package identity before MIDI")
++    rc, out, err = cli([p, "--fm-tracker", "--verify-only"], None)
++    ok(rc == 0 and "package verified" in out and "no device was contacted" in out,
++       "verify-only checks FM-Tracker package without mido or a device")
+     rc, out, err = cli([pkgfile("short.fwsc", b"\0" * 100), "--yes"], FakeFM1(image))
+@@ -298,3 +308,3 @@ def against_js():
+           "const p = readFileSync(process.argv[1]); process.stderr.write(productOf(p));"
+-          "process.stdout.write(logicalImage(p));") % str(ROOT / "web/fm1pkg.js")
++          "process.stdout.write(logicalImage(p));") % (ROOT / "web/fm1pkg.js").as_uri()
+     r = subprocess.run(["node", "--input-type=module", "-e", js, str(clean)], capture_output=True, check=True)
+@@ -304,2 +314,5 @@ def against_js():
+     ok(I.LOADER_MARK in raw, f"{clean.name} carries the Felucca loader marker")
++    rc, out, err = cli([str(clean), "--fm-tracker", "--verify-only"], None)
++    ok(rc == 0 and "FM-1_900" in out and "package verified" in out,
++       f"built FM-Tracker .fwsc passes installer preflight ({I.product_of(raw)})")
+ 
+diff --git a/tools/fm1_install.py b/tools/fm1_install.py
+index f11033b..3688e69 100644
+--- a/tools/fm1_install.py
++++ b/tools/fm1_install.py
+@@ -370,3 +370,3 @@ class Updater:
+ 
+-def load_package(path, force):
++def load_package(path, force, expected_product=None):
+     try:
+@@ -378,2 +378,4 @@ def load_package(path, force):
+         raise InstallError("badpkg", f"{path}: not an FM-1 package (identity {product!r})")
++    if expected_product and product != expected_product:
++        raise InstallError("badpkg", f"{path}: package identity is {product}, expected {expected_product}")
+     if LOADER_MARK not in raw and not force:
+@@ -467,3 +469,3 @@ class Progress:
+ def run(a, backend, out, ask):
+-    up = Updater(backend, a.port)
++    up = Updater(backend, a.port) if backend is not None else None
+     if a.info:
+@@ -476,4 +478,8 @@ def run(a, backend, out, ask):
+         return 0
+-    product, image = load_package(a.package, a.force)
+-    print(f"package: {product}  ({a.package})", file=out)
++    expected_product = "FM-1_900" if a.fm_tracker else None
++    product, image = load_package(a.package, a.force, expected_product)
++    print(f"package: {product}  ({a.package}; {len(image)} bytes, intact)", file=out)
++    if a.verify_only:
++        print("package verified for the SLOOP/Felucca update protocol; no device was contacted", file=out)
++        return 0
+     dev = up.find()
+@@ -509,7 +515,11 @@ def main(argv=None, backend=None, out=sys.stdout, ask=ask_tty):
+     ap.add_argument("--force", action="store_true", help="install a package without the Felucca loader marker")
++    ap.add_argument("--fm-tracker", action="store_true",
++                    help="require the FM-Tracker build identity FM-1_900")
++    ap.add_argument("--verify-only", action="store_true",
++                    help="validate the package and updater format without contacting a device")
+     a = ap.parse_args(argv)
+-    if bool(a.info) == bool(a.package):
+-        ap.error("give a PACKAGE.fwsc or --info")
++    if bool(a.info) == bool(a.package) or (a.info and (a.fm_tracker or a.verify_only)):
++        ap.error("give a PACKAGE.fwsc or --info; --verify-only and --fm-tracker need a package")
+     try:
+-        if backend is None:
++        if backend is None and not a.verify_only:
+             try:

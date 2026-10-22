@@ -50,6 +50,9 @@ and UndefinedBehaviorSanitizer runs.
 
 The overlay exposes native storage and chain APIs, but this milestone does not
 add screen controls for editing the bank or building chains, nor save the new
-bank to flash. The AC79/JieLi target build and FM-1 hardware behavior are still
-unverified. Follow SLOOP's documented SDK and toolchain setup before attempting
-a target build; do not flash an unverified image.
+bank to flash. A JieLi AC79 target build has succeeded, and its `FM-1_900`
+package passes the local SLOOP installer preflight for the two-stage Felucca
+update format and package CRCs. The installer patch adds `--fm-tracker` to pin
+that product identity and `--verify-only` to perform checks without MIDI access.
+The stock-device handshake and actual FM-1 playback remain unverified. Do not
+flash until the device identity and recovery path have been confirmed.
