@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "tracker_sloop_adapter.h"
 
-#include <string.h>
+#include <stddef.h>
 
 static int control_lock(fm_tracker_sloop_t *adapter, uint32_t *token)
 {
@@ -22,13 +22,19 @@ void fm_tracker_sloop_init(fm_tracker_sloop_t *adapter,
     uint8_t i;
     if (adapter == NULL)
         return;
-    memset(adapter, 0, sizeof(*adapter));
     fm_tracker_init(&adapter->scheduler);
+    adapter->ops.control_lock = NULL;
+    adapter->ops.control_unlock = NULL;
+    adapter->ops.phrase_valid = NULL;
+    adapter->ops.transition = NULL;
+    adapter->user = NULL;
+    for (i = 0; i < FM_TRACKER_TRACKS; ++i) {
+        adapter->active_phrase[i] = FM_TRACKER_NO_PHRASE;
+        adapter->active_transpose[i] = 0;
+    }
     if (ops != NULL)
         adapter->ops = *ops;
     adapter->user = user;
-    for (i = 0; i < FM_TRACKER_TRACKS; ++i)
-        adapter->active_phrase[i] = FM_TRACKER_NO_PHRASE;
 }
 
 int fm_tracker_sloop_set_chain(fm_tracker_sloop_t *adapter, uint8_t track,

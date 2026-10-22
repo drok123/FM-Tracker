@@ -2,7 +2,23 @@
 #include "tracker_chain.h"
 
 #include <stddef.h>
-#include <string.h>
+
+static void clear_bytes(void *dst, size_t count)
+{
+    unsigned char *bytes = (unsigned char *)dst;
+    size_t i;
+    for (i = 0u; i < count; ++i)
+        bytes[i] = 0u;
+}
+
+static void copy_bytes(void *dst, const void *src, size_t count)
+{
+    unsigned char *out = (unsigned char *)dst;
+    const unsigned char *in = (const unsigned char *)src;
+    size_t i;
+    for (i = 0u; i < count; ++i)
+        out[i] = in[i];
+}
 
 static void change_to(fm_tracker_track_t *track, int16_t phrase,
                       int8_t transpose, uint32_t row,
@@ -22,7 +38,7 @@ void fm_tracker_init(fm_tracker_t *tracker)
 {
     uint8_t i;
     if (tracker != NULL) {
-        memset(tracker, 0, sizeof(*tracker));
+        clear_bytes(tracker, sizeof(*tracker));
         for (i = 0u; i < FM_TRACKER_TRACKS; ++i)
             tracker->tracks[i].phrase = FM_TRACKER_NO_PHRASE;
     }
@@ -35,8 +51,8 @@ void fm_tracker_transport_reset(fm_tracker_t *tracker)
         return;
     for (i = 0u; i < FM_TRACKER_TRACKS; ++i) {
         fm_tracker_track_t *state = &tracker->tracks[i];
-        memset(&state->chain_running, 0,
-               sizeof(*state) - offsetof(fm_tracker_track_t, chain_running));
+        clear_bytes(&state->chain_running,
+                    sizeof(*state) - offsetof(fm_tracker_track_t, chain_running));
         state->phrase = FM_TRACKER_NO_PHRASE;
     }
     tracker->last_row = 0u;
@@ -56,11 +72,11 @@ int fm_tracker_set_chain(fm_tracker_t *tracker, uint8_t track,
         if (entries[i].phrase < 0 || entries[i].rows == 0u ||
             entries[i].repeats == 0u)
             return 0;
-    memset(&tracker->tracks[track].chain, 0,
-           sizeof(tracker->tracks[track].chain));
+    clear_bytes(&tracker->tracks[track].chain,
+                sizeof(tracker->tracks[track].chain));
     if (count != 0u)
-        memcpy(tracker->tracks[track].chain.entries, entries,
-               (size_t)count * sizeof(*entries));
+        copy_bytes(tracker->tracks[track].chain.entries, entries,
+                   (size_t)count * sizeof(*entries));
     tracker->tracks[track].chain.count = count;
     tracker->tracks[track].chain.loop = loop;
     tracker->tracks[track].chain_running = 0u;
@@ -215,7 +231,7 @@ int fm_tracker_advance(fm_tracker_t *tracker, uint32_t transport_row,
         (transport_row < tracker->last_row ||
          (tracker->last_row != UINT32_MAX && transport_row > tracker->last_row + 1u)))
         return 0;
-    memset(changes, 0, sizeof(*changes) * FM_TRACKER_TRACKS);
+    clear_bytes(changes, sizeof(*changes) * FM_TRACKER_TRACKS);
     tracker->last_row = transport_row;
     tracker->have_row = 1u;
     for (i = 0u; i < FM_TRACKER_TRACKS; ++i) {
