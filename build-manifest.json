@@ -73,10 +73,21 @@
     "tracker_key_push"
   ],
   "device_validation": {
-    "installed": false,
-    "device_contacted": false,
+    "installed": true,
+    "device_contacted": true,
     "hardware_behavior_tested": false,
-    "recovery_behavior_tested": false
+    "recovery_behavior_tested": false,
+    "installation": {
+      "installed": true,
+      "installed_at_utc": "2026-10-22T03:43:47Z",
+      "device_identity": "FM-1_900",
+      "device_port": "Felucca 1",
+      "package_sha256": "d0e74b9d459ecb33d3e4e6e8483adf60b618d19ffc8a709a6d31668eaa00f444",
+      "updater_result": "completed; device restarted and reported FM-1_900",
+      "fresh_status_check": "FM-1_900 [running] on Felucca 1",
+      "hardware_behavior_tested": false,
+      "recovery_behavior_tested": false
+    }
   },
   "host_midi_dependencies": {
     "mido": "1.2.10",
