@@ -33,7 +33,7 @@ index b204f0e..d6fd391 100644
      uint32_t rat_lanes;          /* .. per lane (drums): 2 bits each */
      uint32_t rskip_abs;          /* live recording put notes into the step about to play: */
 diff --git a/firmware/src/felucca.c b/firmware/src/felucca.c
-index 9b0d354..0e429a5 100644
+index 9b0d354..21dfc18 100644
 --- a/firmware/src/felucca.c
 +++ b/firmware/src/felucca.c
 @@ -14,10 +14,22 @@
@@ -59,9 +59,17 @@ index 9b0d354..0e429a5 100644
  #include "cpu1.h"           /* the second core's job API (defined in cpu1.c; the host tests have their own) */
  #include "engines.c"
  #include "drums.c"
+@@ -69,6 +81,7 @@
+ #include "ui_layers.c"       /* hold a function button: what the keys and knobs do (TE style) */
+ #include "ui_menu.c"
+ #include "ui_input.c"
++#include "ui_tracker.c"      /* native phrase-bank editor, separate UI mode */
+ #ifndef FELUCCA_FLASH
+ #define FELUCCA_FLASH 1          /* flash driver + storage.c */
+ #endif
 diff --git a/firmware/src/fm_tracker_bank.c b/firmware/src/fm_tracker_bank.c
 new file mode 100644
-index 0000000..e408a72
+index 0000000..35d5cee
 --- /dev/null
 +++ b/firmware/src/fm_tracker_bank.c
 @@ -0,0 +1,66 @@
@@ -243,10 +251,25 @@ index 20c4eda..18f4824 100644
  #if FELUCCA_ARRANGER
  #include "arranger_scene.c"
 diff --git a/firmware/src/seq.c b/firmware/src/seq.c
-index cbb4201..2209ef5 100644
+index cbb4201..d0bb4e9 100644
 --- a/firmware/src/seq.c
 +++ b/firmware/src/seq.c
-@@ -654,7 +654,12 @@ UI_SMALL static void hold_restart(track_t *t, uint32_t j, uint32_t len, uint32_t
+@@ -153,8 +153,14 @@ static volatile uint8_t ly_lock = LY_PLAY;
+ static uint32_t layer_buttons(void) { return fm1_in.buttons | (ly_lock != LY_PLAY ? ly_bit[ly_lock % LY_COUNT] : 0u); }
+ /* the layer the keys are in: the held function button (FX, EDIT, ARP, SEQ, SEL, GLO in that order),
+  * else the locked one */
++#if FELUCCA_TRACKER
++static volatile uint8_t tracker_editor_mode; /* only the keyboard layer routing, no clock/state */
++#endif
+ static uint32_t layer_now(void)
+ {
++#if FELUCCA_TRACKER
++    if (tracker_editor_mode) return LY_PLAY;
++#endif
+     uint32_t b = layer_buttons(), l;
+     for (l = LY_FX; l < LY_COUNT; l++)
+         if (b & ly_bit[l])
+@@ -654,7 +660,12 @@ UI_SMALL static void hold_restart(track_t *t, uint32_t j, uint32_t len, uint32_t
   * step ends the hold before (the step model ties the notes of one step only). */
  UI_SMALL static void rec_note(track_t *t, uint32_t note, uint32_t vel, uint32_t rat, int hold)
  {
@@ -260,7 +283,7 @@ index cbb4201..2209ef5 100644
      int was_empty = !(t->step[idx % NSTEP].time == ST_NOTE && t->step[idx % NSTEP].n);
      step_t *st = &t->step[idx % NSTEP];
      uint8_t ch[4], keep[4];
-@@ -736,7 +741,12 @@ UI_SMALL static void rec_note(track_t *t, uint32_t note, uint32_t vel, uint32_t
+@@ -736,7 +747,12 @@ UI_SMALL static void rec_note(track_t *t, uint32_t note, uint32_t vel, uint32_t
  static uint8_t roll_rec;                         /* (2.7) a roll's hit is being recorded (roll_hit) */
  static void rec_hit(track_t *t, uint32_t lane, uint32_t lvl, uint32_t rat)
  {
@@ -274,7 +297,7 @@ index cbb4201..2209ef5 100644
      int was_empty = !(t->dstep[idx % NSTEP].on[0] | t->dstep[idx % NSTEP].on[1]);
      undo_mark(t, UNDO_REC(t));
      dstep_set(&t->dstep[idx], lane, lvl, rat);
-@@ -2262,6 +2272,9 @@ static void seq_reset_tracks(uint32_t pos)
+@@ -2262,6 +2278,9 @@ static void seq_reset_tracks(uint32_t pos)
      for (i = 0; i < NTRK; i++) {
          track_t *t = &trk[i];
          t->seq_abs = SEQ_NONE;
@@ -284,7 +307,7 @@ index cbb4201..2209ef5 100644
          t->seq_idx = 0;
          t->rskip_n = 0;
          t->rskip_lanes = 0;
-@@ -2286,9 +2299,23 @@ static void seq_reset_tracks(uint32_t pos)
+@@ -2286,9 +2305,23 @@ static void seq_reset_tracks(uint32_t pos)
  
  static void song_backup(void);                     /* project.c: song mode keeps the loop you made */
  static void song_restore(void);
@@ -308,7 +331,7 @@ index cbb4201..2209ef5 100644
  #if FELUCCA_ARRANGER
      if (arrangement_enabled && !song.playing) {
          rec_wait = 0;                              /* song mode plays, it does not record */
-@@ -2332,6 +2359,9 @@ static void seq_stop(void)
+@@ -2332,6 +2365,9 @@ static void seq_stop(void)
          locks_restore(&trk[i]);                    /* the parameters back to their base */
          trk[i].rh_n = 0;                           /* a recorded note held over the stop: as far as it got */
      }
@@ -318,7 +341,7 @@ index cbb4201..2209ef5 100644
      seq_out_all_off();
  #if FELUCCA_ARRANGER
      if (arrangement_clock.running) {
-@@ -2502,7 +2532,12 @@ static void seq_ratchets(track_t *t, uint32_t into, uint32_t slen)
+@@ -2502,7 +2538,12 @@ static void seq_ratchets(track_t *t, uint32_t into, uint32_t slen)
   * (micro >= 0), or how far before its step (micro < 0, as a negative number) */
  static int32_t micro_units(const track_t *t, uint32_t abs, uint32_t slen)
  {
@@ -331,7 +354,7 @@ index cbb4201..2209ef5 100644
      return (int32_t)(slen / 64u) * m;                /* |m| <= 32: fits */
  }
  
-@@ -2524,6 +2559,10 @@ static void seq_tick(track_t *t, uint32_t adv)
+@@ -2524,6 +2565,10 @@ static void seq_tick(track_t *t, uint32_t adv)
      }
      if (!song.playing)
          return;
@@ -342,7 +365,7 @@ index cbb4201..2209ef5 100644
      abs = trk_grid(t, &into, &slen);
      {
          uint32_t div = trk_div(t);
-@@ -2548,7 +2587,11 @@ static void seq_tick(track_t *t, uint32_t adv)
+@@ -2548,7 +2593,11 @@ static void seq_tick(track_t *t, uint32_t adv)
      }
      if (fire) {                                      /* a new step: one a block at most */
          t->seq_abs = nabs;
@@ -354,7 +377,7 @@ index cbb4201..2209ef5 100644
          t->seq_idx = (uint16_t)idx;
          t->rat_done[0] = t->rat_done[1] = t->rat_done[2] = t->rat_done[3] = 0;
          t->rat_lanes = 0;
-@@ -2597,6 +2640,103 @@ static void seq_tick(track_t *t, uint32_t adv)
+@@ -2597,6 +2646,103 @@ static void seq_tick(track_t *t, uint32_t adv)
          seq_ratchets(t, rel < 0 ? 0u : (uint32_t)rel, slen);
  }
  
@@ -458,7 +481,7 @@ index cbb4201..2209ef5 100644
  /* MIDI in: the track that has channel ch (0..15) as its own: the drum track's GLO > DRUMS > CH, synth track i's
   * GLO > MIDI > CHi (2.6; 1, 2, 3 as before; a channel two tracks have: the first of them), else 0 */
  static track_t *midi_own(uint32_t ch)
-@@ -3237,6 +3377,12 @@ static void events_block(uint32_t n)
+@@ -3237,6 +3383,12 @@ static void events_block(uint32_t n)
              input_off(t, d1);
          }
      }
@@ -473,7 +496,7 @@ index cbb4201..2209ef5 100644
      click_tick();
 diff --git a/firmware/src/tracker_chain.c b/firmware/src/tracker_chain.c
 new file mode 100644
-index 0000000..674e7cf
+index 0000000..54e2628
 --- /dev/null
 +++ b/firmware/src/tracker_chain.c
 @@ -0,0 +1,252 @@
@@ -832,7 +855,7 @@ index 0000000..7cbcee6
 +#endif
 diff --git a/firmware/src/tracker_sloop_adapter.c b/firmware/src/tracker_sloop_adapter.c
 new file mode 100644
-index 0000000..8e8aa76
+index 0000000..b2f3c1f
 --- /dev/null
 +++ b/firmware/src/tracker_sloop_adapter.c
 @@ -0,0 +1,164 @@
@@ -1067,6 +1090,364 @@ index 0000000..55010fe
 +int fm_tracker_sloop_row(fm_tracker_sloop_t *adapter, uint32_t transport_row);
 +
 +#endif
+diff --git a/firmware/src/ui.c b/firmware/src/ui.c
+index 7cb22cb..58f323a 100644
+--- a/firmware/src/ui.c
++++ b/firmware/src/ui.c
+@@ -98,6 +98,13 @@ static int32_t accel(uint32_t role, int32_t s, int32_t range);   /* ui_input.c *
+ static void layer_screen_draw(void);                            /* ui_layers.c */
+ static void hold_screen_draw(void);
+ static uint8_t layer_shown;
++#if FELUCCA_TRACKER
++static void tracker_ui_draw(void);
++static int tracker_ui_active(void);
++static int tracker_ui_busy(void);
++static void tracker_ui_open(void);
++static void tracker_ui_input(uint32_t pressed, uint32_t home);
++#endif
+ 
+ UI_SMALL static uint32_t page_first(uint32_t fam)
+ {
+diff --git a/firmware/src/ui_draw.c b/firmware/src/ui_draw.c
+index 537a174..c4c04a6 100644
+--- a/firmware/src/ui_draw.c
++++ b/firmware/src/ui_draw.c
+@@ -1052,6 +1052,14 @@ static uint8_t vis_on, vis_shown_last, vis_name_t;   /* the visualiser (ui_vis.c
+ UI_SMALL static void ui_draw(void)
+ {
+     ui.frame++;
++#if FELUCCA_TRACKER
++    if (tracker_ui_active()) {
++        tracker_ui_draw();
++        ui_timers();
++        ui.force = 0;
++        return;
++    }
++#endif
+     pads_tick();
+     if (rec_go) {                                       /* the take started: say so */
+         rec_go = 0;
+diff --git a/firmware/src/ui_input.c b/firmware/src/ui_input.c
+index 36a1888..99743f5 100644
+--- a/firmware/src/ui_input.c
++++ b/firmware/src/ui_input.c
+@@ -1105,6 +1105,12 @@ UI_SMALL static void ui_input(void)
+     ml_poll();                                          /* MIDI LEARN: a CC came for the picked parameter (2.6) */
+     page_fix();                                         /* (a page the track does not have: its neighbour, 2.6) */
+     midi_entry();                                       /* (the STEP page's MIDI notes: read every frame, 2.6) */
++#if FELUCCA_TRACKER
++    if (tracker_ui_active()) {
++        tracker_ui_input(pressed, home);
++        return;
++    }
++#endif
+     if (home == BT_HOLD) {                              /* HOME held: open the menu, or leave it */
+         if (ui.menu) {
+             menu_close();
+diff --git a/firmware/src/ui_menu.c b/firmware/src/ui_menu.c
+index ff8b1e1..57cb0f5 100644
+--- a/firmware/src/ui_menu.c
++++ b/firmware/src/ui_menu.c
+@@ -11,12 +11,20 @@ enum { MI_COLOR, MI_ZOOM, MI_ACCEL, MI_LIGHTS, MI_KEYS, MI_NOTES, MI_LOWCUT, MI_
+ #if FELUCCA_CDC
+        MI_SERIAL,
+ #endif
+-       MI_RATE, MI_FRESO, MI_ADV, MI_DPREV, MI_CPU1, MI_PANEL, MI_LCLEAR, MI_ABOUT, MI_COUNT };
++       MI_RATE, MI_FRESO, MI_ADV, MI_DPREV,
++#if FELUCCA_TRACKER
++       MI_TRACKER,
++#endif
++       MI_CPU1, MI_PANEL, MI_LCLEAR, MI_ABOUT, MI_COUNT };
+ static const char *const MI_NAME[MI_COUNT] = {"COLOR", "ZOOM", "KNOB ACCEL", "LIGHTS", "KEYS", "NOTES", "SPEAKER LOWCUT", "USB AUDIO",
+ #if FELUCCA_CDC
+                                               "USB SERIAL",
+ #endif
+-                                              "USB RATE", "FILTER RESO", "STEP ADVANCE", "DRUM PREVIEW", "2ND CORE", "HARDWARE CALIBRATION", "MIDI LEARN CLEAR", "ABOUT"};
++                                              "USB RATE", "FILTER RESO", "STEP ADVANCE", "DRUM PREVIEW",
++#if FELUCCA_TRACKER
++                                              "TRACKER MODE",
++#endif
++                                              "2ND CORE", "HARDWARE CALIBRATION", "MIDI LEARN CLEAR", "ABOUT"};
+ enum { MS_SCREEN, MS_LIGHTS, MS_AUDIO, MS_SEQ, MS_SYSTEM, MS_COUNT };   /* (2.7.1: SEQ) */
+ static const char *const MS_NAME[MS_COUNT] = {"SCREEN", "LIGHTS", "AUDIO", "SEQ", "SYSTEM"};   /* (AUDIO: and USB) */
+ static const uint8_t MS_FIRST[MS_COUNT + 1] = {MI_COLOR, MI_LIGHTS, MI_LOWCUT, MI_ADV, MI_CPU1, MI_COUNT};   /* rows of each */
+@@ -61,7 +69,10 @@ UI_SMALL static const char *mi_value(uint32_t i, uint16_t *c)
+     case MI_ZOOM: return settings.zoom ? "ON" : "OFF";
+     case MI_ACCEL: return knob_accel_off ? "OFF" : "ON";   /* (2.7) the knobs speed up with a fast turn */
+     case MI_ADV: return step_adv_off ? "OFF" : "ON";      /* (2.7.1) the STEP page's cursor moves on when the keys are let go */
+-    case MI_DPREV: return drum_preview ? "ON" : "OFF";     /* (2.7.1) a drum sound picked with a knob is heard */
++    case MI_DPREV: return drum_preview ? "ON" : "OFF";
++#if FELUCCA_TRACKER
++    case MI_TRACKER: return tracker_ui_busy() ? "STOP / DISARM FIRST" : "OCT+ OPEN";
++#endif     /* (2.7.1) a drum sound picked with a knob is heard */
+     case MI_LIGHTS: return LIGHTS_NAME[lights_lvl % LIGHTS_N];
+     case MI_KEYS:
+         *c = lights_lvl ? C_HI : C_DIM;               /* (needs LIGHTS) */
+@@ -111,7 +122,11 @@ UI_SMALL static void draw_menu(void)
+     uint32_t sig = ui.menu * 7u + ui.menu_sel * 131u + settings.palette * 1009u + settings.lowcut * 7919u +
+                    settings.zoom * 104729u + lights_lvl * 1299709u + lights_keys * 15485863u + ml_count() * 2654435u +
+                    lights_notes * 32452843u + usb_full * 49979687u + usb_serial * 86028121u + usb_rate * 15486719u + theme_shown() * 32452867u + theme.crc + cpu1_off * 122949829u +
+-                   knob_accel_off * 179424673u + drum_preview * 236887691u + step_adv_off * 373587883u + flt_reso * 512927357u;
++                   knob_accel_off * 179424673u + drum_preview * 236887691u + step_adv_off * 373587883u + flt_reso * 512927357u
++#if FELUCCA_TRACKER
++                   + tracker_ui_busy() * 982451653u
++#endif
++                   ;
+     if (!ui.force && sig == ui.menu_sig)
+         return;
+     ui.menu_sig = sig;
+@@ -313,6 +328,11 @@ UI_SMALL static void mi_set(uint32_t i, int32_t s)
+         if (!s)
+             ui_message(ml_clear_all() ? "LEARN CLEARED" : "NOTHING LEARNED");
+         break;
++#if FELUCCA_TRACKER
++    case MI_TRACKER:
++        if (!s) tracker_ui_open();
++        break;
++#endif
+     case MI_PANEL:                                     /* actions: OCT+ only */
+         if (!s) {
+             panel_setup();
+diff --git a/firmware/src/ui_tracker.c b/firmware/src/ui_tracker.c
+new file mode 100644
+index 0000000..be7506c
+--- /dev/null
++++ b/firmware/src/ui_tracker.c
+@@ -0,0 +1,234 @@
++/* SPDX-License-Identifier: GPL-3.0-only */
++/* A view/editor of the native phrase bank, never a second sequencer. */
++#if FELUCCA_TRACKER
++static struct {
++    uint8_t phrase, row, voice;
++    uint8_t dirty;                    /* screen invalidation, not sequencer state */
++} tracker_ui;
++
++UI_SMALL static int tracker_ui_active(void) { return tracker_editor_mode; }
++
++UI_SMALL static int tracker_ui_busy(void)
++{
++    return song.playing || transport_req || song.rec || rec_wait || ft_on || ci_on;
++}
++
++UI_SMALL static void tracker_ui_open(void)
++{
++    if (tracker_ui_busy())
++        return;
++    layer_unlock();
++    go_home();                        /* no hidden step-entry or grid keyboard */
++    vis_on = 0;
++    kb_grid = 0;
++    ui.menu = 0;
++    tracker_editor_mode = 1;
++    ui.layer = LY_PLAY;
++    lk_r = lk_w;
++    tracker_ui.dirty = 1;
++}
++
++UI_SMALL static fm_tracker_phrase_t *tracker_ui_phrase(void)
++{
++    return fm_tracker_phrase_present(song.sel, tracker_ui.phrase) ?
++        &fm_tracker_phrase_bank[song.sel][tracker_ui.phrase] : 0;
++}
++
++UI_SMALL static void tracker_ui_fix(void)
++{
++    fm_tracker_phrase_t *p = tracker_ui_phrase();
++    uint32_t len = p ? (uint32_t)clamp(p->length, 1, NSTEP) : NSTEP;
++    if (tracker_ui.row >= len)
++        tracker_ui.row = (uint8_t)(len - 1u);
++    if (tracker_ui.voice >= (is_drum(TSEL) ? DRUM_LANES : 4u))
++        tracker_ui.voice = 0;
++}
++
++/* All mutations are main-loop only, stopped, and atomic against audio/USB
++ * transport requests. No live-track change occurs until explicit LOAD. */
++UI_SMALL static void tracker_ui_edit(uint32_t knob, int32_t delta)
++{
++    fm_tracker_phrase_t *p;
++    step_t *st;
++    uint32_t v = tracker_ui.voice;
++    if (!delta || tracker_ui_busy() || !(p = tracker_ui_phrase()))
++        return;
++    fm1_irq_off();
++    if (tracker_ui_busy()) {
++        fm1_irq_on();
++        return;
++    }
++    st = &p->step[tracker_ui.row];
++    if (knob == 3u)
++        p->micro[tracker_ui.row] = (int8_t)clamp(p->micro[tracker_ui.row] + delta, MICRO_MIN, MICRO_MAX);
++    else if (!is_drum(TSEL)) {
++        if (knob == 0u && v == 0u && (st->time != ST_NOTE || !st->n)) {
++            step_clear(st);
++            st->time = ST_NOTE;
++            st->n = 1;
++            st->note[0] = 60;
++            st->vel = 96;
++        } else if (st->time == ST_NOTE && v < st->n && v < 4u) {
++            if (knob == 0u)
++                st->note[v] = (uint8_t)clamp(st->note[v] + delta, 0, 127);
++            if (knob == 1u)
++                st->vel = (uint8_t)clamp((st->vel ? st->vel : 96) + delta, 1, 127);
++        }
++    } else {
++        dstep_t *d = &p->dstep[tracker_ui.row];
++        uint8_t bit = (uint8_t)(1u << (v & 7u));
++        if (knob == 0u) {
++            if (delta > 0) d->on[v / 8u] |= bit;
++            else d->on[v / 8u] &= (uint8_t)~bit;
++        }
++        if (knob == 1u && (d->on[v / 8u] & bit)) {
++            uint32_t shift = 2u * (v % 4u);
++            uint32_t level = (d->lvl[v / 4u] >> shift) & 3u;
++            /* LV_* is stored NORM,GHOST,SOFT,HARD, not loudness order. */
++            static const uint8_t rank[4] = {2, 0, 1, 3}, value[4] = {LV_GHOST, LV_SOFT, LV_NORM, LV_HARD};
++            level = value[clamp((int32_t)rank[level] + delta, 0, 3)];
++            d->lvl[v / 4u] = (uint8_t)((d->lvl[v / 4u] & ~(3u << shift)) | (level << shift));
++        }
++    }
++    fm1_irq_on();
++    tracker_ui.dirty = 1;
++}
++
++UI_SMALL static void tracker_ui_input(uint32_t pressed, uint32_t home)
++{
++    uint32_t k;
++    int32_t s;
++    if (home == BT_TAP || home == BT_HOLD) {
++        tracker_editor_mode = 0;
++        lk_r = lk_w;
++        go_home();
++        /* A hold's release must not open the visualiser. */
++        if (home == BT_HOLD) home_eat = 1;
++        for (k = 0; k < NE; k++) panel_enc(k);
++        return;
++    }
++    if ((s = panel_enc(EN_ALGO)) != 0) {
++        track_select((uint32_t)clamp((int32_t)song.sel + s, 0, NTRK - 1));
++        tracker_ui.voice = 0;
++        tracker_ui.dirty = 1;
++    }
++    if ((s = panel_enc(EN_PRESET)) != 0) {
++        tracker_ui.phrase = (uint8_t)clamp(tracker_ui.phrase + s, 0, FM_TRACKER_PHRASES - 1);
++        tracker_ui.dirty = 1;
++    }
++    tracker_ui_fix();
++    if ((s = panel_enc(EN_SELECT)) != 0) {
++        fm_tracker_phrase_t *p = tracker_ui_phrase();
++        tracker_ui.row = (uint8_t)clamp(tracker_ui.row + s, 0, p ? p->length - 1 : NSTEP - 1);
++        tracker_ui.dirty = 1;
++    }
++    if ((s = panel_enc(EN_K3)) != 0) {
++        tracker_ui.voice = (uint8_t)clamp(tracker_ui.voice + s, 0, is_drum(TSEL) ? DRUM_LANES - 1 : 3);
++        tracker_ui.dirty = 1;
++    }
++    tracker_ui_edit(0, panel_enc(EN_K1));
++    tracker_ui_edit(1, panel_enc(EN_K2));
++    tracker_ui_edit(3, panel_enc(EN_K4));
++    if (!tracker_ui_busy()) {
++        if (pressed & (1u << panel.btn[B_SEQ])) {
++            /* Capture and apply use the same native bank and transition as chains. */
++            fm1_irq_off();
++            if (!tracker_ui_busy())
++                fm_tracker_phrase_capture(song.sel, tracker_ui.phrase);
++            fm1_irq_on();
++            tracker_ui.dirty = 1;
++        } else if ((pressed & (1u << panel.btn[B_OCTUP])) && tracker_ui_phrase()) {
++            fm1_irq_off();
++            if (!tracker_ui_busy())
++                tracker_phrase_transition(0, song.sel, -1, 0, tracker_ui.phrase, 0, 0);
++            fm1_irq_on();
++            tracker_ui.dirty = 1;
++        }
++    }
++    if (pressed & (1u << panel.btn[B_PLAY])) {
++        if (song.playing || !arrangement_enabled || arr_valid(&arrangement, arrangement_ready()))
++            if (!ft_owns_press()) transport_req = song.playing ? 2 : 1;
++    }
++    tracker_ui_fix();
++}
++
++UI_SMALL static void tracker_ui_draw(void)
++{
++    fm_tracker_phrase_t *p = tracker_ui_phrase();
++    uint32_t i, first, v = tracker_ui.voice, busy = tracker_ui_busy();
++    static uint32_t was_busy = 99;
++    char b[32];
++    tracker_ui_fix();
++    if (!ui.force && !tracker_ui.dirty && was_busy == busy)
++        return;
++    tracker_ui.dirty = 0;
++    was_busy = busy;
++    cv_begin(240, 20, C_BLACK);
++    str_cpy(b, "TRACKER T", sizeof b); fmt_int(b + 9, song.sel + 1);
++    str_cpy(b + str_len(b), " P", 3); fmt_int(b + str_len(b), tracker_ui.phrase + 1);
++    cv_text(0, 1, &FONT_S, b, C_HI);
++    cv_text(152, 1, &FONT_S, busy ? "READ ONLY" : "BANK EDIT", C_GRAY);
++    cv_blit(0, 0);
++    cv_begin(240, 18, C_BLACK);
++    cv_text(0, 0, &FONT_S, "ROW NOTE VEL INS FX", C_GRAY);
++    cv_blit(0, 20);
++    first = tracker_ui.row / 8u * 8u;
++    for (i = 0; i < 8u; i++) {
++        uint32_t row = first + i, j, on = 0, rat = 0;
++        uint16_t color = row == tracker_ui.row ? C_WHITE : C_HI;
++        const step_t *st = p ? &p->step[row] : 0;
++        cv_begin(240, 20, row == tracker_ui.row ? C_LINE : C_BLACK);
++        fmt_int(b, row); cv_text(0, 1, &FONT_S, b, color);
++        if (p && row < (uint32_t)p->length) {
++            if (is_drum(TSEL)) {
++                const dstep_t *d = &p->dstep[row];
++                on = (d->on[v / 8u] >> (v % 8u)) & 1u;
++                str_cpy(b, on ? "HIT" : "---", sizeof b);
++                rat = (d->rat[v / 4u] >> (2u * (v % 4u))) & 3u;
++            } else {
++                on = st->time == ST_NOTE && v < st->n && v < 4u;
++                if (on) note_name(b, st->note[v]);
++                else str_cpy(b, st->time == ST_TIE ? "===" : "---", sizeof b);
++                rat = (st->rat >> (2u * v)) & 3u;
++            }
++            cv_text(32, 1, &FONT_S, b, color);
++            if (!on) str_cpy(b, "---", sizeof b);
++            else if (is_drum(TSEL)) {
++                uint32_t level = (p->dstep[row].lvl[v / 4u] >> (2u * (v % 4u))) & 3u;
++                fmt_int(b, lvl_vel(level, 96));
++            } else fmt_int(b, lvl_vel((st->lvl >> (2u * v)) & 3u,
++                                      st->flags & SF_ACCENT ? 127 : st->vel ? st->vel : 96));
++            cv_text(72, 1, &FONT_S, b, color);
++            /* No per-row instrument exists: T1..T3 are live track sounds,
++             * D01..D16 are native drum lanes, never invented preset IDs. */
++            str_cpy(b, is_drum(TSEL) ? "D" : "T", sizeof b);
++            fmt_int(b + 1, is_drum(TSEL) ? v + 1 : song.sel + 1);
++            cv_text(104, 1, &FONT_S, b, C_GRAY);
++            str_cpy(b, "........", sizeof b);
++            if (!is_drum(TSEL)) {
++                if (st->flags & SF_ACCENT) b[0] = 'A';
++                if (st->flags & SF_SLIDE) b[1] = 'S';
++                if (st->flags & SF_CONT(v)) b[6] = 'C';
++                if (st->flags & SF_LEG) b[7] = 'G';
++            }
++            if (on && rat) b[2] = (char)('1' + rat);
++            if (p->micro[row]) b[3] = 'M';
++            if ((p->fill[row / 4u] >> (2u * (row % 4u))) & 3u) b[4] = 'F';
++            for (j = 0; j < NLOCK; j++) if (p->lock[j].step == row) b[5] = 'L';
++            cv_text(136, 1, &FONT_S, b, C_GRAY);
++        }
++        cv_blit(0, 38u + i * 20u);
++    }
++    cv_begin(240, 18, C_BLACK);
++    if (!p) str_cpy(b, "EMPTY: SEQ CAPTURES LIVE", sizeof b);
++    else {
++        str_cpy(b, "K3 VOICE ", sizeof b); fmt_int(b + 9, v + 1);
++        str_cpy(b + str_len(b), "  K4 MICRO ", 12);
++        fmt_int(b + str_len(b), p->micro[tracker_ui.row]);
++    }
++    cv_text(0, 0, &FONT_S, b, C_GRAY); cv_blit(0, 198);
++    cv_begin(240, 24, C_BLACK);
++    cv_text(0, 4, &FONT_S, "HOME:EXIT SEQ:CAP OCT+:LOAD", C_GRAY);
++    cv_blit(0, 216);
++}
++#endif
 diff --git a/tests/hostsim.c b/tests/hostsim.c
 index f230de8..5b81851 100644
 --- a/tests/hostsim.c
@@ -1093,9 +1474,47 @@ index f230de8..5b81851 100644
  #include "../firmware/src/cpu1.h"
  #include "cpu1_host.c"                  /* the second core on the host: CORES=1 inline, CORES=2 a thread */
  #include "../firmware/src/engines.c"
+diff --git a/tests/install_test.py b/tests/install_test.py
+index 4fc3ab0..a3e81cf 100644
+--- a/tests/install_test.py
++++ b/tests/install_test.py
+@@ -283,6 +283,16 @@ def errors():
+     dev = FakeFM1(image)
+     rc, out, err = cli([pkgfile("damaged.fwsc", package(damage=True)), "--yes"], dev)
+     ok(rc == 2 and "damaged package" in err and dev.sent == [], "damaged package (a file's CRC) -> exit 2, no MIDI")
++    dev = FakeFM1(image)
++    rc, out, err = cli([p, "--fm-tracker", "--yes"], dev)
++    ok(rc == 0 and dev.bad == 0, "FM-Tracker profile accepts FM-1_900 with intact Felucca loader")
++    dev = FakeFM1(image)
++    rc, out, err = cli([pkgfile("wrong-product.fwsc", package("FM-1_901")), "--fm-tracker", "--yes"], dev)
++    ok(rc == 2 and "expected FM-1_900" in err and dev.upgrades == 0,
++       "FM-Tracker profile rejects another package identity before MIDI")
++    rc, out, err = cli([p, "--fm-tracker", "--verify-only"], None)
++    ok(rc == 0 and "package verified" in out and "no device was contacted" in out,
++       "verify-only checks FM-Tracker package without mido or a device")
+     rc, out, err = cli([pkgfile("short.fwsc", b"\0" * 100), "--yes"], FakeFM1(image))
+     ok(rc == 2 and "too short" in err, "not a package -> exit 2")
+     rc, out, err = cli([str(TMP / "missing.fwsc"), "--yes"], FakeFM1(image))
+@@ -296,12 +306,15 @@ def against_js():
+         return
+     js = ("import { logicalImage, productOf } from %r; import { readFileSync } from 'node:fs';"
+           "const p = readFileSync(process.argv[1]); process.stderr.write(productOf(p));"
+-          "process.stdout.write(logicalImage(p));") % str(ROOT / "web/fm1pkg.js")
++          "process.stdout.write(logicalImage(p));") % (ROOT / "web/fm1pkg.js").as_uri()
+     r = subprocess.run(["node", "--input-type=module", "-e", js, str(clean)], capture_output=True, check=True)
+     raw = clean.read_bytes()
+     ok(I.logical_image(raw) == r.stdout and I.product_of(raw) == r.stderr.decode(),
+        f"logical_image / product_of == fm1pkg.js ({clean.name}, {I.product_of(raw)})")
+     ok(I.LOADER_MARK in raw, f"{clean.name} carries the Felucca loader marker")
++    rc, out, err = cli([str(clean), "--fm-tracker", "--verify-only"], None)
++    ok(rc == 0 and "FM-1_900" in out and "package verified" in out,
++       f"built FM-Tracker .fwsc passes installer preflight ({I.product_of(raw)})")
+ 
+ 
+ wire()
 diff --git a/tests/tracker_phrase_test.c b/tests/tracker_phrase_test.c
 new file mode 100644
-index 0000000..b3daaf4
+index 0000000..7c41452
 --- /dev/null
 +++ b/tests/tracker_phrase_test.c
 @@ -0,0 +1,178 @@
@@ -1277,55 +1696,161 @@ index 0000000..b3daaf4
 +           (unsigned)sizeof fm_tracker_phrase_bank + sizeof fm_tracker_phrase_valid);
 +    return fails;
 +}
-
-diff --git a/tests/install_test.py b/tests/install_test.py
-index 4fc3ab0..a3e81cf 100644
---- a/tests/install_test.py
-+++ b/tests/install_test.py
-@@ -285,2 +285,12 @@ def errors():
-     ok(rc == 2 and "damaged package" in err and dev.sent == [], "damaged package (a file's CRC) -> exit 2, no MIDI")
-+    dev = FakeFM1(image)
-+    rc, out, err = cli([p, "--fm-tracker", "--yes"], dev)
-+    ok(rc == 0 and dev.bad == 0, "FM-Tracker profile accepts FM-1_900 with intact Felucca loader")
-+    dev = FakeFM1(image)
-+    rc, out, err = cli([pkgfile("wrong-product.fwsc", package("FM-1_901")), "--fm-tracker", "--yes"], dev)
-+    ok(rc == 2 and "expected FM-1_900" in err and dev.upgrades == 0,
-+       "FM-Tracker profile rejects another package identity before MIDI")
-+    rc, out, err = cli([p, "--fm-tracker", "--verify-only"], None)
-+    ok(rc == 0 and "package verified" in out and "no device was contacted" in out,
-+       "verify-only checks FM-Tracker package without mido or a device")
-     rc, out, err = cli([pkgfile("short.fwsc", b"\0" * 100), "--yes"], FakeFM1(image))
-@@ -298,3 +308,3 @@ def against_js():
-           "const p = readFileSync(process.argv[1]); process.stderr.write(productOf(p));"
--          "process.stdout.write(logicalImage(p));") % str(ROOT / "web/fm1pkg.js")
-+          "process.stdout.write(logicalImage(p));") % (ROOT / "web/fm1pkg.js").as_uri()
-     r = subprocess.run(["node", "--input-type=module", "-e", js, str(clean)], capture_output=True, check=True)
-@@ -304,2 +314,5 @@ def against_js():
-     ok(I.LOADER_MARK in raw, f"{clean.name} carries the Felucca loader marker")
-+    rc, out, err = cli([str(clean), "--fm-tracker", "--verify-only"], None)
-+    ok(rc == 0 and "FM-1_900" in out and "package verified" in out,
-+       f"built FM-Tracker .fwsc passes installer preflight ({I.product_of(raw)})")
- 
+diff --git a/tests/tracker_ui_test.c b/tests/tracker_ui_test.c
+new file mode 100644
+index 0000000..f7adcba
+--- /dev/null
++++ b/tests/tracker_ui_test.c
+@@ -0,0 +1,103 @@
++/* SPDX-License-Identifier: GPL-3.0-only */
++/* Real panel -> UI -> native phrase bank -> SLOOP mix_block, with LCD bounds. */
++#define UI_PAGES_HARNESS_ONLY
++#include "ui_pages_test.c"
++
++static void turn(uint32_t role, int32_t delta)
++{
++    encs[panel.enc[role]] = delta;
++    frame();
++}
++
++int main(int argc, char **argv)
++{
++    fm_tracker_phrase_t before;
++    step_t live[NSTEP];
++    uint32_t i;
++    outdir = argc > 1 ? argv[1] : "build/host";
++    panel = PANEL_DEFAULT;
++    layers_init();
++    palette_set(4);
++    host_tracks_init();
++    tracker_init();
++    go_home();
++    assert(!tracker_ui_active());
++    for (i = 0; i < NSTEP; i++) step_clear(&trk[0].step[i]);
++    trk[0].p[P_SLEN] = 16;
++    trk[0].step[0] = (step_t){.note={60,64,67}, .n=3, .time=ST_NOTE,
++        .vel=90, .flags=SF_ACCENT|SF_SLIDE|SF_CONT(1), .lvl=LV_SOFT<<2, .rat=2};
++    trk[0].micro[0] = -7;
++    trk[0].fill[0] = FC_FILL;
++    trk[0].lock[0] = (plock_t){.step=0,.param=P_LEVEL,.val=90};
++    memcpy(live, trk[0].step, sizeof live);
++    press(B_HOME); frames(50); release(B_HOME);
++    assert(ui.menu == 1 && !tracker_ui_active());
++    /* Reach the labeled SEQ section and its third row using real controls. */
++    turn(EN_SELECT, 1); turn(EN_SELECT, 1); turn(EN_SELECT, 1);
++    assert(mi_sec(ui.menu_sel) == MS_SEQ);
++    turn(EN_PRESET, 1); turn(EN_PRESET, 1);
++    assert(ui.menu_sel == MI_TRACKER);
++    tap(B_OCTUP);
++    assert(tracker_ui_active() && !ui.menu && !song.seq_mode && !kb_grid);
++    assert(!memcmp(live, trk[0].step, sizeof live));
++    assert(!tracker_ui_phrase());
++    turn(EN_K1, 1);                  /* empty bank never edits the live track */
++    assert(!tracker_ui_phrase() && !memcmp(live, trk[0].step, sizeof live));
++    tap(B_SEQ);
++    assert(tracker_ui_phrase());
++    assert(!memcmp(live, tracker_ui_phrase()->step, sizeof live));
++    before = *tracker_ui_phrase();
++    ppm("tracker-synth");
++    turn(EN_K3, 1); turn(EN_K1, 2);
++    assert(tracker_ui_phrase()->step[0].note[1] == 66);
++    assert(tracker_ui_phrase()->step[0].note[0] == 60);
++    assert(tracker_ui_phrase()->step[0].flags == before.step[0].flags);
++    assert(tracker_ui_phrase()->step[0].rat == before.step[0].rat);
++    assert(tracker_ui_phrase()->step[0].lvl == before.step[0].lvl);
++    turn(EN_K2, -1); turn(EN_K4, 2);
++    assert(tracker_ui_phrase()->step[0].vel == 89 && tracker_ui_phrase()->micro[0] == -5);
++    assert(!memcmp(live, trk[0].step, sizeof live));
++    assert(!memcmp(before.lock, tracker_ui_phrase()->lock, sizeof before.lock));
++    assert(!memcmp(before.fill, tracker_ui_phrase()->fill, sizeof before.fill));
++    turn(EN_SELECT, 1000); assert(tracker_ui.row == 15);
++    turn(EN_SELECT, -1000); assert(tracker_ui.row == 0);
++    turn(EN_K3, -1000); turn(EN_SELECT, 1); turn(EN_K1, 1);
++    assert(tracker_ui_phrase()->step[1].n == 1 && tracker_ui_phrase()->step[1].note[0] == 60);
++    turn(EN_K1, 1000); assert(tracker_ui_phrase()->step[1].note[0] == 127);
++    turn(EN_K1, -1000); assert(tracker_ui_phrase()->step[1].note[0] == 0);
++    turn(EN_K4, 1000); assert(tracker_ui_phrase()->micro[1] == MICRO_MAX);
++    turn(EN_K4, -1000); assert(tracker_ui_phrase()->micro[1] == MICRO_MIN);
++    tap(B_OCTUP);
++    assert(!memcmp(trk[0].step, tracker_ui_phrase()->step, sizeof live));
++    assert(!memcmp(trk[0].micro, tracker_ui_phrase()->micro, sizeof trk[0].micro));
++    assert(fm_tracker_sloop.active_phrase[0] == FM_TRACKER_NO_PHRASE);
++    before = *tracker_ui_phrase();
++    tap(B_PLAY); assert(song.playing);
++    turn(EN_K1, 1); turn(EN_K2, 1); turn(EN_K4, 1); tap(B_SEQ); tap(B_OCTUP);
++    assert(!memcmp(&before, tracker_ui_phrase(), sizeof before));
++    tap(B_PLAY); assert(!song.playing);
++    song.rec = 1; turn(EN_K1, 1); tap(B_SEQ); tap(B_OCTUP);
++    assert(!memcmp(&before, tracker_ui_phrase(), sizeof before)); song.rec = 0;
++    /* Editor function buttons never divert keyboard notes into destructive layers. */
++    press(B_EDIT); assert(layer_now() == LY_PLAY); release(B_EDIT);
++    turn(EN_ALGO, 3); assert(song.sel == TRK_DRUM);
++    tap(B_SEQ); turn(EN_K3, 15); turn(EN_K1, 1); turn(EN_K2, 1);
++    assert(dstep_has(&tracker_ui_phrase()->dstep[1], 15));
++    assert((tracker_ui_phrase()->dstep[1].lvl[3] >> 6) == LV_HARD);
++    ppm("tracker-drums");
++    turn(EN_K1, -1); assert(!dstep_has(&tracker_ui_phrase()->dstep[1], 15));
++    turn(EN_PRESET, 100); assert(tracker_ui.phrase == 3 && !tracker_ui_phrase());
++    ppm("tracker-empty");
++    turn(EN_PRESET, -100); assert(tracker_ui.phrase == 0);
++    turn(EN_ALGO, -100); assert(song.sel == 0);
++    tap(B_HOME); assert(!tracker_ui_active() && !song.seq_mode);
++    assert(!memcmp(&before, &fm_tracker_phrase_bank[0][0], sizeof before));
++    assert(ly_lock == LY_PLAY);
++    /* Entry is gated without mutating the existing recording/transport state. */
++    song.rec = 1; tracker_ui_open(); assert(!tracker_ui_active() && song.rec == 1); song.rec = 0;
++    transport_req = 1; tracker_ui_open(); assert(!tracker_ui_active() && transport_req == 1); transport_req = 0;
++    tracker_ui_open(); press(B_HOME); frames(50); release(B_HOME);
++    assert(!tracker_ui_active() && !ui.menu && !vis_on);
++    puts("tracker UI: navigation, edits, native load, transport, recording guards and LCD bounds passed");
++    return 0;
++}
+diff --git a/tests/ui_pages_test.c b/tests/ui_pages_test.c
+index 82bf02f..74aa2cc 100644
+--- a/tests/ui_pages_test.c
++++ b/tests/ui_pages_test.c
+@@ -85,6 +85,7 @@ static void settings_save(void) {}
+ #include "../firmware/src/ui_layers.c"
+ #include "../firmware/src/ui_menu.c"
+ #include "../firmware/src/ui_input.c"
++#include "../firmware/src/ui_tracker.c"
+ #include "../firmware/src/splash.c"
+ /* (2.7) the theme's CRC: storage.c's st_crc32 (its flash hooks unused here) */
+ static int st_read(uint32_t off, void *dst, uint32_t n) { (void)off, (void)dst, (void)n; return -1; }
 diff --git a/tools/fm1_install.py b/tools/fm1_install.py
 index f11033b..3688e69 100644
 --- a/tools/fm1_install.py
 +++ b/tools/fm1_install.py
-@@ -370,3 +370,3 @@ class Updater:
+@@ -368,7 +368,7 @@ class Updater:
+ 
+ # ------------------------------------------------------------------- CLI ---
  
 -def load_package(path, force):
 +def load_package(path, force, expected_product=None):
      try:
-@@ -378,2 +378,4 @@ def load_package(path, force):
+         raw = open(path, "rb").read()
+     except OSError as e:
+@@ -376,6 +376,8 @@ def load_package(path, force):
+     product = product_of(raw)
+     if not re.fullmatch(r"[^_]+_\d+", product):
          raise InstallError("badpkg", f"{path}: not an FM-1 package (identity {product!r})")
 +    if expected_product and product != expected_product:
 +        raise InstallError("badpkg", f"{path}: package identity is {product}, expected {expected_product}")
      if LOADER_MARK not in raw and not force:
-@@ -467,3 +469,3 @@ class Progress:
+         raise InstallError("badpkg", f"{path}: no Felucca update loader in this package; "
+                                      "only Felucca's own packages are installed (--force overrides)")
+@@ -465,7 +467,7 @@ class Progress:
+ 
+ 
  def run(a, backend, out, ask):
 -    up = Updater(backend, a.port)
 +    up = Updater(backend, a.port) if backend is not None else None
      if a.info:
-@@ -476,4 +478,8 @@ def run(a, backend, out, ask):
+         dev = up.find()
+         if not dev:
+@@ -474,8 +476,12 @@ def run(a, backend, out, ask):
+         mode = "update loader (update not finished)" if dev.id.loader else "running"
+         print(f"{dev.id.text}  [{mode}]  port: {dev.name}", file=out)
          return 0
 -    product, image = load_package(a.package, a.force)
 -    print(f"package: {product}  ({a.package})", file=out)
@@ -1336,7 +1861,11 @@ index f11033b..3688e69 100644
 +        print("package verified for the SLOOP/Felucca update protocol; no device was contacted", file=out)
 +        return 0
      dev = up.find()
-@@ -509,7 +515,11 @@ def main(argv=None, backend=None, out=sys.stdout, ask=ask_tty):
+     if not dev:
+         raise not_found(up)
+@@ -507,11 +513,15 @@ def main(argv=None, backend=None, out=sys.stdout, ask=ask_tty):
+     ap.add_argument("--port", metavar="NAME", help="MIDI port to use (part of its name)")
+     ap.add_argument("--yes", action="store_true", help="do not ask for confirmation")
      ap.add_argument("--force", action="store_true", help="install a package without the Felucca loader marker")
 +    ap.add_argument("--fm-tracker", action="store_true",
 +                    help="require the FM-Tracker build identity FM-1_900")
@@ -1351,3 +1880,5 @@ index f11033b..3688e69 100644
 -        if backend is None:
 +        if backend is None and not a.verify_only:
              try:
+                 backend = MidoBackend()
+             except ImportError:

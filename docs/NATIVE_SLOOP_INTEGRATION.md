@@ -48,9 +48,9 @@ layout and index calculations. The CI job builds and runs SLOOP's existing
 actual `mix_block` → `events_block` → `seq_tick` path, including AddressSanitizer
 and UndefinedBehaviorSanitizer runs.
 
-The overlay exposes native storage and chain APIs, but this milestone does not
-add screen controls for editing the bank or building chains, nor save the new
-bank to flash. A JieLi AC79 target build has succeeded, and its `FM-1_900`
+The overlay now includes a separate [traditional tracker screen](TRACKER_SCREEN.md)
+for navigation and stopped phrase-bank editing/capture/load. Chain construction
+and phrase-bank persistence remain unavailable from the screen. A JieLi AC79 target build has succeeded, and its `FM-1_900`
 package passes the local SLOOP installer preflight for the two-stage Felucca
 update format and package CRCs. The installer patch adds `--fm-tracker` to pin
 that product identity and `--verify-only` to perform checks without MIDI access.

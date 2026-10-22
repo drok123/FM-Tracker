@@ -35,6 +35,10 @@ jobs:
       - name: Generate SLOOP host headers and test stock playback
         run: |
           mkdir -p sloop-fm1/build/gen sloop-fm1/build/host
+          python -m pip install Pillow
+          python sloop-fm1/tools/gen_font.py sloop-fm1/build/gen/felucca_font.h
+          python sloop-fm1/tools/gen_icons.py sloop-fm1/build/gen/felucca_icons.h
+          python sloop-fm1/tools/gen_logo.py sloop-fm1/build/gen/sloop_logo.h
           python sloop-fm1/tools/gen_tables.py sloop-fm1/build/gen/felucca_tables.h
           python sloop-fm1/tools/gen_fm6_patches.py sloop-fm1/build/gen/felucca_fm6.h
           python sloop-fm1/tools/gen_samples.py sloop-fm1/build/gen/felucca_samples.h
@@ -51,3 +55,16 @@ jobs:
         run: |
           cc -O1 -g -w -DFELUCCA_TRACKER=1 -fsanitize=address,undefined -fno-sanitize=shift-base,signed-integer-overflow -fno-sanitize-recover=all -Isloop-fm1/build/gen -Isloop-fm1/firmware/src -o sloop-fm1/build/host/tracker_phrase_test_san sloop-fm1/tests/tracker_phrase_test.c -lm
           sloop-fm1/build/host/tracker_phrase_test_san
+
+      - name: Exercise native tracker controls and LCD bounds
+        run: |
+          cc -O1 -w -Isloop-fm1/build/gen -Isloop-fm1/firmware/src -o sloop-fm1/build/host/tracker_ui_test sloop-fm1/tests/tracker_ui_test.c -lm
+          sloop-fm1/build/host/tracker_ui_test sloop-fm1/build/host
+          cc -O1 -g -w -fsanitize=address,undefined -fno-sanitize=shift-base,signed-integer-overflow -fno-sanitize-recover=all -Isloop-fm1/build/gen -Isloop-fm1/firmware/src -o sloop-fm1/build/host/tracker_ui_test_san sloop-fm1/tests/tracker_ui_test.c -lm
+          sloop-fm1/build/host/tracker_ui_test_san sloop-fm1/build/host
+      - name: Preserve normal SLOOP UI in stock and tracker builds
+        run: |
+          for mode in 0 1; do
+            cc -O1 -w -DFELUCCA_TRACKER=$mode -Isloop-fm1/build/gen -Isloop-fm1/firmware/src -o sloop-fm1/build/host/ui_pages_$mode sloop-fm1/tests/ui_pages_test.c -lm
+            sloop-fm1/build/host/ui_pages_$mode sloop-fm1/build/host
+          done
