@@ -2,29 +2,20 @@
 
 Experimental tracker sequencer and sampler firmware for the M-VAVE FM-1.
 
-## Traditional tracker screen
+## Tracker-first prototype
 
-The opt-in tracker mode uses SLOOP's native phrase bank. Hold HOME, select the
-SEQ menu section, choose TRACKER MODE with PRESETS, and tap OCT+. SLOOP still
-starts normally. See [controls, connected functions, limits, and validation](docs/TRACKER_SCREEN.md).
-This candidate was installed after explicit user approval; a fresh handshake
-reports FM-1_900. Tracker screen interaction and audio still need hands-on
-validation. The earlier hardware-tested build is archived for rollback.
+FM-Tracker now starts in its own four-track pattern editor. SEQ switches the
+physical keys between white-key step entry and pitched note entry; holding a
+step lets the four knobs edit it. Native SLOOP synthesis, sample playback,
+recording, timing and project data remain underneath the application. Hold
+HOME to open the SLOOP fallback.
 
-## Status
-**Native SLOOP overlay target-compiled and installed; playback not yet tested.** The pinned SLOOP
-patch adds a per-track native phrase bank and invokes chain transitions from
-SLOOP's existing `events_block`/`seq_tick` path. A JieLi AC79 build produces
-`work/sloop-fm1/build/felucca.fwsc`; the local SLOOP installer preflight checks
-its package identity, loader marker, and CRCs. The device accepted the update
-from factory identity `FM-1_014` over USB-MIDI and now reports `FM-1_900`.
-Tracker playback and audio behavior remain unverified on the device.
-
-Captured SLOOP playback now shares fine timing with the offline preview and
-preserves chords, per-note/lane dynamics, ratchets and microtiming across live
-phrase switches. This is verified only as abstract host events. See the
-[playback contract](docs/CAPTURED_PLAYBACK.md) and [architecture audit](docs/AUDIT.md)
-for supported behavior and the remaining firmware integration gaps.
+See the [hardware/application audit](docs/TRACKER_FIRST_AUDIT.md) and
+[actual controls, limitations and validation](docs/TRACKER_SCREEN.md).
+The tracker-first candidate is not installed. The previously installed
+tracker-add-on package is preserved for rollback, along with the earlier
+SLOOP-startup build. See [build-manifest.json](build-manifest.json) for the exact
+candidate, verification results and device status.
 
 ## Design goals
 - Tracker-style phrase, chain, and song sequencing
@@ -40,7 +31,7 @@ for supported behavior and the remaining firmware integration gaps.
 3. **FM-1 adapter:** buttons, display, storage, timing, and audio integration.
 4. **Editor/test harness:** run patterns and verify event timelines on a desktop before hardware flashing.
 
-## Current milestone
+## Retained native foundation
 The Python source model and event preview preserve captured SLOOP steps. The
 native overlay copies all SLOOP step fields into an independent per-track phrase
 bank and advances chains from SLOOP's current transport immediately before its

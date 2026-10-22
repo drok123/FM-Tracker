@@ -48,13 +48,11 @@ layout and index calculations. The CI job builds and runs SLOOP's existing
 actual `mix_block` → `events_block` → `seq_tick` path, including AddressSanitizer
 and UndefinedBehaviorSanitizer runs.
 
-The overlay now includes a separate [traditional tracker screen](TRACKER_SCREEN.md)
-for navigation and stopped phrase-bank editing/capture/load. Chain construction
-and phrase-bank persistence remain unavailable from the screen. A JieLi AC79 target build has succeeded, and its `FM-1_900`
-package passes the local SLOOP installer preflight for the two-stage Felucca
-update format and package CRCs. The installer patch adds `--fm-tracker` to pin
-that product identity and `--verify-only` to perform checks without MIDI access.
-The physical FM-1 responded as factory identity `FM-1_014`. The package was
-installed directly from that firmware over USB-MIDI, and both the updater and
-a fresh read-only handshake reported `FM-1_900`. Audio, sequencing, phrase
-editing, and recovery behavior have not yet been exercised on the device.
+The overlay now starts in the [FM-Tracker primary application](TRACKER_SCREEN.md).
+It edits the native live patterns directly and retains the separate phrase-bank
+and chain APIs described above. No additional sequencer state is introduced.
+The former add-on screen and its installed package are preserved as rollback.
+See the [application boundary audit](TRACKER_FIRST_AUDIT.md) for the hardware,
+input, display, audio, recording and storage seams. The tracker-first candidate
+has not been installed on hardware; its build/package status is recorded in
+`build-manifest.json`.
