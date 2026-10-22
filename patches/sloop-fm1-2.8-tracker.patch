@@ -1326,13 +1326,15 @@ new file mode 100644
 index 0000000..21b3136
 --- /dev/null
 +++ b/firmware/src/ui_tracker.c
-@@ -0,0 +1,269 @@
+@@ -0,0 +1,313 @@
 +/* SPDX-License-Identifier: GPL-3.0-only */
 +/* FM-Tracker primary application. trk[] is authoritative; no private pattern,
 + * clock, voices or recording buffer. The native phrase bank remains separate. */
 +#if FELUCCA_TRACKER
 +static struct {
 +    uint8_t row, lane, pitch, help, saved_arrangement, hold_row[27];
++    uint8_t rec_held, rec_consumed;
++    uint32_t rec_since;
 +    uint32_t held, used, session;
 +} tracker_ui;
 +UI_SMALL static int tracker_ui_active(void) { return tracker_editor_mode; }
@@ -1349,7 +1351,7 @@ index 0000000..21b3136
 +    layer_unlock(); go_home(); vis_on = 0; kb_grid = 0; ui.menu = 0; ui.layer = LY_PLAY;
 +    tracker_ui.saved_arrangement = arrangement_enabled;
 +    arrangement_enabled = 0;                 /* loop playback needs no scenes */
-+    tracker_ui.help = 0; tracker_ui_cancel_keys(); tracker_editor_mode = 1; ui.force = 1;
++    tracker_ui.help = 0; tracker_ui.rec_held = 0; tracker_ui_cancel_keys(); tracker_editor_mode = 1; ui.force = 1;
 +}
 +UI_SMALL static void tracker_ui_boot(void)
 +{ tracker_ui.pitch = 60; tracker_key_mode = 0; tracker_ui_open(); }
@@ -1450,22 +1452,64 @@ index 0000000..21b3136
 +    }
 +    fm1_irq_on(); sync_reload = 1;
 +}
++/* REC tap is dispatched on release; holding it never starts recording. */
++UI_SMALL static void tracker_ui_rec_clear(void)
++{
++    uint32_t i;
++    track_t *t = TSEL;
++    if (tracker_ui_busy()) { ui_message("STOP / DISARM TO CLEAR"); return; }
++    fm1_irq_off();
++    undo_mark(t, (undo_sess += 4u) | 3u);
++    for (i = 0; i < NSTEP; ++i) {
++        step_clear(&t->step[i]);
++        memset(&t->dstep[i], 0, sizeof t->dstep[i]);
++        t->micro[i] = 0;
++    }
++    memset(t->fill, 0, sizeof t->fill);
++    memset(t->lock, 0, sizeof t->lock);
++    t->lk_n = 0;
++    fm1_irq_on();
++    sync_reload = 1;
++    ui_message("TRACK CLEARED");
++    ui.force = 1;
++}
++UI_SMALL static void tracker_ui_rec_button(uint32_t pressed)
++{
++    uint32_t bit = 1u << panel.btn[B_REC];
++    uint32_t held = fm1_in.buttons & bit;
++    if (pressed & bit) {
++        tracker_ui.rec_held = 1;
++        tracker_ui.rec_consumed = 0;
++        tracker_ui.rec_since = fm1_ms;
++    }
++    if (!tracker_ui.rec_held) return;
++    if (held && !tracker_ui.rec_consumed &&
++        (uint32_t)(fm1_ms - tracker_ui.rec_since) >= 1500u) {
++        tracker_ui.rec_consumed = 1;
++        tracker_ui_cancel_keys();
++        tracker_ui_rec_clear();
++    }
++    if (!held) {
++        if (!tracker_ui.rec_consumed) {
++            tracker_ui_cancel_keys(); tracker_key_mode = 1;
++            if (ft_on) transport_req = 1; else rec_toggle();
++        }
++        tracker_ui.rec_held = 0;
++    }
++}
 +UI_SMALL static void tracker_ui_input(uint32_t pressed, uint32_t home)
 +{
 +    uint32_t k; int32_t s;
 +    tracker_ui_fix();
 +    if (home == BT_HOLD) {
-+        tracker_ui_cancel_keys(); tracker_editor_mode = 0;
++        tracker_ui_cancel_keys(); tracker_ui.rec_held = 0; tracker_editor_mode = 0;
 +        arrangement_enabled = tracker_ui.saved_arrangement; home_eat = 1; go_home();
 +        for (k = 0; k < NE; k++) panel_enc(k);
 +        return;
 +    }
 +    if (home == BT_TAP) { tracker_ui.help = (uint8_t)!tracker_ui.help; tracker_ui_cancel_keys(); ui.force = 1; }
 +    tracker_ui_events();
-+    if (pressed & (1u << panel.btn[B_REC])) {
-+        tracker_ui_cancel_keys(); tracker_key_mode = 1;
-+        if (ft_on) transport_req = 1; else rec_toggle();
-+    }
++    tracker_ui_rec_button(pressed);
 +    if ((pressed & (1u << panel.btn[B_PLAY])) && !ft_owns_press()) transport_req = song.playing ? 2 : 1;
 +    if (tracker_ui.help) { for (k = 0; k < NE; k++) panel_enc(k); return; }
 +    if (pressed & (1u << panel.btn[B_SEQ])) { tracker_ui_cancel_keys(); tracker_key_mode = (uint8_t)!tracker_key_mode; ui.force = 1; }
