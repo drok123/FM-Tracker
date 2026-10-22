@@ -122,4 +122,8 @@ The previous installed package is preserved separately, with SHA-256
 `ad6f9de8fda132fe211c334fc2ac9bd4d5b10943d65f9e84648840b71720d34c`.
 Its manifest and overlay are archived alongside it. The user confirmed that
 build boots into SLOOP and works; detailed audio/recovery behavior has not
-been independently measured. The new tracker-screen package is **not flashed**.
+been independently measured. After explicit user authorization, the tracker-screen package was installed
+successfully over USB-MIDI. Both the updater and a fresh read-only handshake
+reported `FM-1_900` on `Felucca 1`. Tracker interaction and audio still need
+hands-on validation; package identity alone does not distinguish these two
+FM-1_900 builds. The manifest pins the exact installed package hash.

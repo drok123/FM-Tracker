@@ -7,8 +7,9 @@ Experimental tracker sequencer and sampler firmware for the M-VAVE FM-1.
 The opt-in tracker mode uses SLOOP's native phrase bank. Hold HOME, select the
 SEQ menu section, choose TRACKER MODE with PRESETS, and tap OCT+. SLOOP still
 starts normally. See [controls, connected functions, limits, and validation](docs/TRACKER_SCREEN.md).
-This candidate has not been installed on hardware; the earlier installed build
-is archived for rollback.
+This candidate was installed after explicit user approval; a fresh handshake
+reports FM-1_900. Tracker screen interaction and audio still need hands-on
+validation. The earlier hardware-tested build is archived for rollback.
 
 ## Status
 **Native SLOOP overlay target-compiled and installed; playback not yet tested.** The pinned SLOOP

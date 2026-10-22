@@ -18,7 +18,9 @@
       "FELUCCA_SLICE": 0,
       "FELUCCA_TRACKER": 1
     },
-    "asset_generation": "Existing generated headers retained from installed build"
+    "asset_generation": "Existing generated headers retained from installed build",
+    "remote_history_merge_commit": "c0405cb029fdae5d16f88736422a3190f9c490e3",
+    "merge_preserves_verified_source_tree": true
   },
   "package": {
     "path": "../sloop-fm1/build/felucca.fwsc",
@@ -61,10 +63,19 @@
     "tracker_ui_edit"
   ],
   "device_validation": {
-    "installed": false,
-    "device_contacted": false,
+    "installed": true,
+    "device_contacted": true,
     "hardware_behavior_tested": false,
-    "recovery_behavior_tested": false
+    "recovery_behavior_tested": false,
+    "pre_install_identity": "FM-1_900",
+    "pre_install_port": "Felucca 1",
+    "installation": "completed successfully over USB-MIDI using the manifest-pinned package",
+    "updater_reported_identity": "FM-1_900",
+    "post_install_read_only_identity": "FM-1_900",
+    "post_install_port": "Felucca 1",
+    "installed_utc": "2026-10-22T02:36:20.091840+00:00",
+    "installation_log_sha256": "9357906b5329775cfe8e17b5e9700e7f5886948de57b8b7d4cfb530cfdf5962a",
+    "authorization": "User explicitly requested sending this candidate to the FM-1"
   },
   "host_midi_dependencies": {
     "mido": "1.2.10",
